@@ -64,6 +64,8 @@ pub enum DataKey {
     Bot(u64),
     UserBots(Address),
     NextBotId,
+    /// Number of bots minted and currently tracked by this contract.
+    Supply,
     Admin,
     Initialized,
 }
@@ -108,6 +110,7 @@ impl BotNFTContract {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Initialized, &true);
         env.storage().instance().set(&DataKey::NextBotId, &1u64);
+        env.storage().instance().set(&DataKey::Supply, &0u64);
         env.storage().instance().extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
         Ok(())
     }
@@ -123,6 +126,11 @@ impl BotNFTContract {
             return Err(BotNFTError::InvalidTier);
         }
         Self::mint_bot_internal(&env, &owner, tier)
+    }
+
+    /// Returns the tracked number of minted bots.
+    pub fn total_supply(env: Env) -> u64 {
+        env.storage().instance().get(&DataKey::Supply).unwrap_or(0)
     }
 
     pub fn get_bot(env: Env, bot_id: u64) -> Result<BotNFT, BotNFTError> {
@@ -199,6 +207,8 @@ impl BotNFTContract {
             .extend_ttl(&DataKey::Bot(bot_id), LEDGER_THRESHOLD, LEDGER_BUMP);
         Self::add_to_user_list(env, owner, bot_id)?;
         env.storage().instance().set(&DataKey::NextBotId, &(bot_id + 1));
+        let supply = env.storage().instance().get(&DataKey::Supply).unwrap_or(0u64);
+        env.storage().instance().set(&DataKey::Supply, &supply.saturating_add(1));
         env.storage().instance().extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
         env.events().publish(
             (symbol_short!("mint"), owner.clone()),
