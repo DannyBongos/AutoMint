@@ -377,6 +377,16 @@ impl AccrualContract {
             .get(&DataKey::BotNft)
             .ok_or(AccrualError::NotInitialized)?;
         accrual.rate = BotNftClient::new(&env, &bot_nft).get_user_total_rate(&user);
+
+        if settled > 0 {
+            let registry: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::Registry)
+                .ok_or(AccrualError::NotInitialized)?;
+            RegistryClient::new(&env, &registry).add_points(&user, &settled);
+        }
+
         env.storage()
             .persistent()
             .set(&DataKey::UserAccrual(user.clone()), &accrual);
@@ -733,7 +743,7 @@ impl AccrualContract {
             // Scale by token decimals so minting "1 AMT" = 10^decimals base units (#410).
             let mint_amount = (amt_to_mint as i128)
                 .checked_mul(config.amt_scale)
-                .unwrap_or(amt_to_mint as i128);
+                .ok_or(AccrualError::TokenMintFailed)?;
             let mint_res = token_client.try_mint(&user, &mint_amount);
             if mint_res.is_err() || matches!(&mint_res, Ok(Err(_))) {
                 let code = invoke_err_code(&mint_res);

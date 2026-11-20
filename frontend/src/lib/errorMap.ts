@@ -68,7 +68,8 @@ export function classifyError(error: unknown): ClassifiedError {
   if (
     lower.includes("wallet") ||
     lower.includes("freighter") ||
-    lower.includes("locked") ||
+    lower.includes("wallet is locked") ||
+    lower.includes("freighter is locked") ||
     lower.includes("rejected") ||
     lower.includes("denied") ||
     lower.includes("declined") ||
