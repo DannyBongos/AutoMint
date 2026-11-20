@@ -19,11 +19,13 @@ import type { DashboardData } from "./useAccrual";
 import { toastContractError } from "@/lib/errors";
 import { CONTRACT_ADDRESSES } from "@/lib/constants";
 import { addressToScVal, u64ToScVal } from "@/lib/stellar";
+import { errorAnalyticsProps, useAnalytics } from "@/lib/analytics";
 export { useProfiles } from "./useProfiles";
 
 export function useBuyBot() {
   const queryClient = useQueryClient();
   const publicKey = useWalletStore(selectPublicKey);
+  const { track } = useAnalytics(publicKey);
 
   return useMutation({
     mutationFn: async (listingId: bigint) => {
@@ -43,6 +45,7 @@ export function useBuyBot() {
       return status;
     },
     onMutate: async (listingId: bigint) => {
+      track("marketplace_buy_started");
       // Optimistic update (#462): drop the bought listing immediately.
       await queryClient.cancelQueries({ queryKey: qk.listings() });
       await queryClient.cancelQueries({ queryKey: qk.myListings(publicKey) });
@@ -54,11 +57,15 @@ export function useBuyBot() {
       queryClient.setQueryData(qk.myListings(publicKey), without);
       return { previousListings, previousMyListings };
     },
+    onSuccess: () => {
+      track("marketplace_buy_success");
+    },
     onError: (
       error: Error,
       _variables: bigint,
       context: { previousListings: unknown; previousMyListings: unknown } | undefined
     ) => {
+      track("marketplace_buy_failed", errorAnalyticsProps(error));
       if (context) {
         queryClient.setQueryData(qk.listings(), context.previousListings);
         queryClient.setQueryData(qk.myListings(publicKey), context.previousMyListings);
