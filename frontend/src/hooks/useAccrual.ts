@@ -26,6 +26,37 @@ import { errorAnalyticsProps, useAnalytics } from "@/lib/analytics";
 
 const POINTS_PER_HOUR_DIVISOR = 3600; // Seconds in an hour
 
+let globalLedgerOffsetMs = 0;
+let ledgerOffsetCallbacks: Set<(offset: number) => void> = new Set();
+let ledgerOffsetPollingStarted = false;
+
+function startGlobalLedgerOffsetPolling() {
+  if (ledgerOffsetPollingStarted) return;
+  ledgerOffsetPollingStarted = true;
+
+  const refresh = async () => {
+    try {
+      const closeTimeSec = await getLedgerCloseTime();
+      const closeTimeMs = closeTimeSec * 1000;
+      const now = Date.now();
+      const skewMs = closeTimeMs - now;
+      globalLedgerOffsetMs = skewMs;
+      ledgerOffsetCallbacks.forEach((cb) => cb(skewMs));
+
+      if (Math.abs(skewMs) > 60_000) {
+        console.warn(
+          `[AutoMint] Client clock skew detected: ${skewMs > 0 ? "+" : ""}${Math.round(skewMs / 1000)}s from ledger time.`,
+        );
+      }
+    } catch {
+      // RPC failure — keep the existing offset.
+    }
+  };
+
+  refresh();
+  setInterval(refresh, DASHBOARD_POLL_MS);
+}
+
 /** Identifiers for the three on-chain registration steps. */
 export type RegisterStepId = "register" | "mint" | "accrual";
 
@@ -510,39 +541,14 @@ export function useClaim() {
  * of browser clock skew.
  */
 export function useLedgerTimeOffset(): number {
-  const [offsetMs, setOffsetMs] = useState(0);
-  const offsetRef = useRef(0);
+  const [offsetMs, setOffsetMs] = useState(globalLedgerOffsetMs);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const refresh = async () => {
-      try {
-        const closeTimeSec = await getLedgerCloseTime();
-        const closeTimeMs = closeTimeSec * 1000;
-        const now = Date.now();
-        const skewMs = closeTimeMs - now;
-
-        if (!cancelled) {
-          offsetRef.current = skewMs;
-          setOffsetMs(skewMs);
-
-          if (Math.abs(skewMs) > 60_000) {
-            console.warn(
-              `[AutoMint] Client clock skew detected: ${skewMs > 0 ? "+" : ""}${Math.round(skewMs / 1000)}s from ledger time.`,
-            );
-          }
-        }
-      } catch {
-        // RPC failure — keep the existing offset.
-      }
-    };
-
-    refresh();
-    const interval = setInterval(refresh, DASHBOARD_POLL_MS);
+    startGlobalLedgerOffsetPolling();
+    const callback = setOffsetMs;
+    ledgerOffsetCallbacks.add(callback);
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      ledgerOffsetCallbacks.delete(callback);
     };
   }, []);
 
