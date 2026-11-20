@@ -373,7 +373,7 @@ The contract emits the following events:
 - `cancel(seller, listing_id)` with `bot_id`
 - `sold(seller, buyer)` with `(listing_id, bot_id, price, currency)`
 - `offered(buyer, offer_id)` with `(bot_id, amount, expires_at)`
-- `offer_acc(seller, buyer)` with `(offer_id, bot_id, amount)`
+- `offer_acc(seller, buyer)` with `(offer_id, bot_id, amount, currency)`
 - `offer_cxl(buyer, offer_id)` with `(bot_id, amount, expired: bool)`
 - `fees_wd(admin, to)` with `(currency, amount, remaining)`
 

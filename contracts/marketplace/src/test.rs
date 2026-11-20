@@ -2941,7 +2941,16 @@ mod offers_and_fees {
         assert_eq!(h.mkt.get_offers_for_bot(&bot_id).len(), 0);
         assert_eq!(h.mkt.get_user_purchases(&buyer, &10).len(), 1);
         assert_eq!(h.mkt.tier_stats(&MktBotTier::Basic).sale_count, 1);
-        assert_eq!(last_event_topic(&h), symbol_short!("offer_acc"));
+        let events = h.env.events().all();
+        let (_, topics, data) = events.last().unwrap();
+        let topic: Symbol = Symbol::try_from_val(&h.env, &topics.get(0).unwrap()).unwrap();
+        assert_eq!(topic, symbol_short!("offer_acc"));
+        let (event_offer, event_bot, event_amount, event_currency): (u64, u64, i128, Address) =
+            <(u64, u64, i128, Address)>::try_from_val(&h.env, &data).unwrap();
+        assert_eq!(event_offer, offer_id);
+        assert_eq!(event_bot, bot_id);
+        assert_eq!(event_amount, PRICE);
+        assert_eq!(event_currency, h.token.address);
     }
 
     #[test]
