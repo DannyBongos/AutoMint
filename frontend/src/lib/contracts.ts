@@ -1,9 +1,4 @@
-import {
-  Contract,
-  rpc,
-  nativeToScVal,
-  xdr,
-} from "@stellar/stellar-sdk";
+import { Contract, rpc, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import {
   CONTRACT_ADDRESSES,
   type ContractName,
@@ -12,13 +7,7 @@ import {
   STELLAR_NETWORK_PASSPHRASE,
   ANONYMOUS_READ_SOURCE,
 } from "./constants";
-import {
-  rpcCall,
-  simulateContractCall,
-  addressToScVal,
-  u64ToScVal,
-  i128ToScVal,
-} from "./stellar";
+import { rpcCall, simulateContractCall, addressToScVal, u64ToScVal, i128ToScVal } from "./stellar";
 import { useWalletStore } from "@/store/walletStore";
 import type {
   BotNFT,
@@ -44,8 +33,7 @@ import type { BotTier as ContractBotTier } from "./bindings/bot_nft/src";
 // Using `extends` with `unknown` ensures the check does not error even if the
 // generated `u64`/`u32` branded types are not exactly `bigint`/`number`.
 // Each check fails to compile if the generated binding drifts from the domain shape.
-const _checkUserProfile: { address: string; username: string } =
-  {} as ContractUserProfile;
+const _checkUserProfile: { address: string; username: string } = {} as ContractUserProfile;
 const _checkBotTier: ContractBotTier = {} as ContractBotTier;
 void _checkUserProfile;
 void _checkBotTier;
@@ -80,15 +68,13 @@ export function toBigInt(v: unknown, field: string): bigint {
   if (typeof v === "string") {
     if (/^-?\d+$/.test(v)) return BigInt(v);
     throw new Error(
-      `toBigInt: field "${field}" must be a base-10 integer string, got ${JSON.stringify(v)}`
+      `toBigInt: field "${field}" must be a base-10 integer string, got ${JSON.stringify(v)}`,
     );
   }
   if (v === undefined || v === null) {
     throw new Error(`toBigInt: required field "${field}" is missing`);
   }
-  throw new Error(
-    `toBigInt: field "${field}" has unsupported type ${typeof v}: ${String(v)}`
-  );
+  throw new Error(`toBigInt: field "${field}" has unsupported type ${typeof v}: ${String(v)}`);
 }
 
 /**
@@ -101,11 +87,7 @@ export function toBigInt(v: unknown, field: string): bigint {
  * @param fallback - value to use when the field is absent.
  * @param field - contract/struct field name, quoted back in the error.
  */
-export function toBigIntOr(
-  v: unknown,
-  fallback: bigint,
-  field = "value"
-): bigint {
+export function toBigIntOr(v: unknown, fallback: bigint, field = "value"): bigint {
   if (v === undefined || v === null) return fallback;
   return toBigInt(v, field);
 }
@@ -142,7 +124,7 @@ function defaultSource(sourceAddress?: string): string {
 
   throw new Error(
     "No simulation source available. " +
-    "Connect a wallet or set NEXT_PUBLIC_SIMULATION_SOURCE in .env.local."
+      "Connect a wallet or set NEXT_PUBLIC_SIMULATION_SOURCE in .env.local.",
   );
 }
 
@@ -168,7 +150,7 @@ async function buildTxXdr(
   contractId: string,
   method: string,
   args: xdr.ScVal[],
-  sourceAddress: string
+  sourceAddress: string,
 ): Promise<string> {
   // TransactionBuilder is imported here, and only here: every read in this
   // file goes through simulateContractCall, so this is the single place that
@@ -211,9 +193,7 @@ async function buildTxXdr(
  * profiles recorded before #373 (and older mocks) omit it, so it falls back
  * to the normalized `username` rather than throwing.
  */
-export function parseUserProfile(
-  rawData: Record<string, unknown>
-): UserProfile {
+export function parseUserProfile(rawData: Record<string, unknown>): UserProfile {
   const address = String(rawData.address ?? "");
   const username = String(rawData.username ?? "");
   const display_name = String(rawData.display_name || username);
@@ -223,9 +203,7 @@ export function parseUserProfile(
   // field is observable as 0 rather than a throw (the required `total_points`
   // still throws, and a present-but-garbage value still throws via toBigInt).
   const claimed_amt = toBigIntOr(rawData.claimed_amt, 0n, "claimed_amt");
-  const registered_at = Number(
-    toBigIntOr(rawData.registered_at, 0n, "registered_at")
-  );
+  const registered_at = Number(toBigIntOr(rawData.registered_at, 0n, "registered_at"));
   const bot_count = Number(toBigIntOr(rawData.bot_count, 0n, "bot_count"));
 
   return {
@@ -255,13 +233,7 @@ export function parseUserProfile(
  * to `"Basic"` and understating a bot's value. A real-simulation fixture is
  * in `contracts.test.ts` (`realBotFixture`).
  */
-const VALID_BOT_TIERS: readonly BotTier[] = [
-  "Basic",
-  "Bronze",
-  "Silver",
-  "Gold",
-  "Diamond",
-];
+const VALID_BOT_TIERS: readonly BotTier[] = ["Basic", "Bronze", "Silver", "Gold", "Diamond"];
 
 /**
  * Shared by every parser that decodes a `BotTier` field (bots, marketplace
@@ -276,11 +248,7 @@ function parseBotTier(rawTier: unknown, context: string): BotTier {
     }
     return rawTier as BotTier;
   }
-  if (
-    Array.isArray(rawTier) &&
-    rawTier.length === 1 &&
-    typeof rawTier[0] === "string"
-  ) {
+  if (Array.isArray(rawTier) && rawTier.length === 1 && typeof rawTier[0] === "string") {
     const candidate = rawTier[0] as string;
     if (!VALID_BOT_TIERS.includes(candidate as BotTier)) {
       throw new Error(`${context}: unrecognized tier "${candidate}"`);
@@ -293,7 +261,9 @@ function parseBotTier(rawTier: unknown, context: string): BotTier {
   if (typeof rawTier === "number" && Number.isInteger(rawTier)) {
     const name = VALID_BOT_TIERS[rawTier];
     if (!name) {
-      throw new Error(`${context}: u32 tier discriminant ${rawTier} out of range 0–${VALID_BOT_TIERS.length - 1}`);
+      throw new Error(
+        `${context}: u32 tier discriminant ${rawTier} out of range 0–${VALID_BOT_TIERS.length - 1}`,
+      );
     }
     return name;
   }
@@ -306,12 +276,14 @@ function parseBotTier(rawTier: unknown, context: string): BotTier {
     const idx = (rawTier as Record<string, unknown>).u32 as number;
     const name = VALID_BOT_TIERS[idx];
     if (!name) {
-      throw new Error(`${context}: u32 tier discriminant ${idx} out of range 0–${VALID_BOT_TIERS.length - 1}`);
+      throw new Error(
+        `${context}: u32 tier discriminant ${idx} out of range 0–${VALID_BOT_TIERS.length - 1}`,
+      );
     }
     return name;
   }
   throw new Error(
-    `${context}: unexpected tier shape ${JSON.stringify(rawTier)}; expected "Gold", ["Gold"], 0–4, or {u32: 0–4}`
+    `${context}: unexpected tier shape ${JSON.stringify(rawTier)}; expected "Gold", ["Gold"], 0–4, or {u32: 0–4}`,
   );
 }
 
@@ -324,25 +296,18 @@ export function parseBotNFT(rawData: Record<string, unknown>): BotNFT {
     owner: String(rawData.owner ?? ""),
     // The bot struct carries `minter` (the royalty recipient). Fall back to
     // the owner so legacy fixtures/mocks render without a phantom royalty.
-    minter:
-      rawData.minter != null ? String(rawData.minter) : String(rawData.owner ?? ""),
+    minter: rawData.minter != null ? String(rawData.minter) : String(rawData.owner ?? ""),
     tier,
     accrual_rate: toBigInt(rawData.accrual_rate, "accrual_rate"),
     minted_at: Number(toBigIntOr(rawData.minted_at, 0n, "minted_at")),
-    last_claim_timestamp: toBigIntOr(
-      rawData.last_claim_timestamp,
-      0n,
-      "last_claim_timestamp"
-    ),
+    last_claim_timestamp: toBigIntOr(rawData.last_claim_timestamp, 0n, "last_claim_timestamp"),
   };
 }
 
 /**
  * Parse a raw scVal map from the marketplace contract into a typed MarketplaceListing.
  */
-export function parseListing(
-  rawData: Record<string, unknown>
-): MarketplaceListing {
+export function parseListing(rawData: Record<string, unknown>): MarketplaceListing {
   return {
     id: toBigInt(rawData.id, "id"),
     seller: String(rawData.seller ?? ""),
@@ -364,7 +329,7 @@ export async function getAmtBalance(userAddress: string): Promise<bigint> {
     CONTRACT_ADDRESSES.token,
     "balance",
     [nativeToScVal(userAddress, { type: "address" })],
-    userAddress
+    userAddress,
   );
   return toBigInt(balance, "balance");
 }
@@ -378,13 +343,56 @@ export async function getAmtDecimals(sourceAddress?: string): Promise<number> {
     CONTRACT_ADDRESSES.token,
     "decimals",
     [],
-    defaultSource(sourceAddress)
+    defaultSource(sourceAddress),
   );
   const decimals = Number(raw);
   if (raw === null || raw === undefined || !Number.isInteger(decimals) || decimals < 0) {
     throw new Error(`decimals returned unexpected value ${String(raw)}`);
   }
   return decimals;
+}
+
+/**
+ * Query `decimals()` on an arbitrary SEP-41 token contract.
+ * Use `getAmtDecimals` for the configured AMT token; use this when the
+ * listing's `currency` field may point to a different contract.
+ */
+export async function getTokenDecimals(
+  contractId: string,
+  sourceAddress?: string,
+): Promise<number> {
+  const raw = await simulateContractCall<number | bigint>(
+    contractId,
+    "decimals",
+    [],
+    defaultSource(sourceAddress),
+  );
+  const decimals = Number(raw);
+  if (raw === null || raw === undefined || !Number.isInteger(decimals) || decimals < 0) {
+    throw new Error(`decimals returned unexpected value ${String(raw)}`);
+  }
+  return decimals;
+}
+
+/**
+ * Query `symbol()` on an arbitrary SEP-41 token contract.
+ * Falls back to a truncated contract address if the call fails (e.g. native
+ * XLM asset wrapper contracts that may not expose `symbol`).
+ */
+export async function getTokenSymbol(contractId: string, sourceAddress?: string): Promise<string> {
+  try {
+    const raw = await simulateContractCall<string>(
+      contractId,
+      "symbol",
+      [],
+      defaultSource(sourceAddress),
+    );
+    if (typeof raw === "string" && raw.length > 0) return raw;
+  } catch {
+    // fall through to address-based fallback
+  }
+  // Truncated fallback: show first 6 + last 4 chars of the contract address.
+  return `${contractId.slice(0, 6)}…${contractId.slice(-4)}`;
 }
 
 /** Default listing duration: 7 days in seconds. */
@@ -404,7 +412,7 @@ export function buildListBotArgs(
   botId: bigint,
   price: bigint,
   currency: string = CONTRACT_ADDRESSES.token,
-  durationSecs: bigint = DEFAULT_LISTING_DURATION_SECS
+  durationSecs: bigint = DEFAULT_LISTING_DURATION_SECS,
 ): xdr.ScVal[] {
   return [
     addressToScVal(seller),
@@ -415,7 +423,6 @@ export function buildListBotArgs(
   ];
 }
 
-
 /**
  * Fetch the leaderboard of top users by points.
  *
@@ -425,20 +432,18 @@ export function buildListBotArgs(
  */
 export async function getLeaderboard(
   limit: number = 50,
-  sourceAddress?: string
+  sourceAddress?: string,
 ): Promise<UserProfile[]> {
   const raw = await simulateContractCall<Record<string, unknown>[]>(
     CONTRACT_ADDRESSES.registry,
     "get_leaderboard",
     [nativeToScVal(limit, { type: "u32" })],
-    defaultSource(sourceAddress)
+    defaultSource(sourceAddress),
   );
   // The contract always returns an array; a non-array means a schema mismatch
   // (e.g. wrong contract ID), not an empty leaderboard.
   if (!Array.isArray(raw)) {
-    throw new Error(
-      `get_leaderboard returned unexpected type ${typeof raw}; expected array`
-    );
+    throw new Error(`get_leaderboard returned unexpected type ${typeof raw}; expected array`);
   }
   return raw.map((entry) => parseUserProfile(entry));
 }
@@ -453,7 +458,7 @@ export async function getSeason(sourceAddress?: string): Promise<number> {
     CONTRACT_ADDRESSES.registry,
     "get_season",
     [],
-    defaultSource(sourceAddress)
+    defaultSource(sourceAddress),
   );
   return Number(raw);
 }
@@ -469,20 +474,17 @@ export async function getSeason(sourceAddress?: string): Promise<number> {
 export async function getLeaderboardForSeason(
   season: number,
   limit: number = 50,
-  sourceAddress?: string
+  sourceAddress?: string,
 ): Promise<UserProfile[]> {
   const raw = await simulateContractCall<Record<string, unknown>[]>(
     CONTRACT_ADDRESSES.registry,
     "get_leaderboard_for_season",
-    [
-      nativeToScVal(season, { type: "u32" }),
-      nativeToScVal(limit, { type: "u32" }),
-    ],
-    defaultSource(sourceAddress)
+    [nativeToScVal(season, { type: "u32" }), nativeToScVal(limit, { type: "u32" })],
+    defaultSource(sourceAddress),
   );
   if (!Array.isArray(raw)) {
     throw new Error(
-      `get_leaderboard_for_season returned unexpected type ${typeof raw}; expected array`
+      `get_leaderboard_for_season returned unexpected type ${typeof raw}; expected array`,
     );
   }
   return raw.map((entry) => {
@@ -552,16 +554,13 @@ function isMissingGetRankMethod(error: unknown): boolean {
   );
 }
 
-async function getRegistryRank(
-  userAddress: string,
-  sourceAddress: string
-): Promise<number | null> {
+async function getRegistryRank(userAddress: string, sourceAddress: string): Promise<number | null> {
   try {
     const raw = await simulateContractCall<number | bigint>(
       CONTRACT_ADDRESSES.registry,
       "get_rank",
       [nativeToScVal(userAddress, { type: "address" })],
-      sourceAddress
+      sourceAddress,
     );
     const rank = Number(raw);
     if (!Number.isInteger(rank) || rank <= 0 || rank >= UNRANKED_SENTINEL) {
@@ -582,7 +581,7 @@ async function getRegistryRank(
  */
 export async function getUserRank(
   userAddress: string,
-  sourceAddress?: string
+  sourceAddress?: string,
 ): Promise<UserRank | null> {
   const source = sourceAddress ?? userAddress;
   const board = await getLeaderboard(RANK_WINDOW, source);
@@ -630,11 +629,8 @@ export async function mintTierBot(address: string, tier: BotTier): Promise<strin
   return buildTxXdr(
     CONTRACT_ADDRESSES.botNft,
     "mint_tier",
-    [
-      nativeToScVal(address, { type: "address" }),
-      xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(tier)]),
-    ],
-    address
+    [nativeToScVal(address, { type: "address" }), xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(tier)])],
+    address,
   );
 }
 
@@ -642,15 +638,12 @@ export async function mintTierBot(address: string, tier: BotTier): Promise<strin
  * Cancel a marketplace listing.
  * Returns the bot to the seller's wallet.
  */
-export async function cancelListing(
-  userAddress: string,
-  listingId: bigint
-): Promise<string> {
+export async function cancelListing(userAddress: string, listingId: bigint): Promise<string> {
   return buildTxXdr(
     CONTRACT_ADDRESSES.marketplace,
     "cancel_listing",
     [addressToScVal(userAddress), u64ToScVal(listingId)],
-    userAddress
+    userAddress,
   );
 }
 
@@ -665,20 +658,17 @@ export async function cancelListing(
 export async function getActiveListings(
   start: number = 0,
   limit: number = 100,
-  sourceAddress?: string
+  sourceAddress?: string,
 ): Promise<MarketplaceListing[]> {
   const listingsRaw = await simulateContractCall<Record<string, unknown>[]>(
     CONTRACT_ADDRESSES.marketplace,
     "get_active_listings",
-    [
-      nativeToScVal(start, { type: "u64" }),
-      nativeToScVal(limit, { type: "u32" }),
-    ],
-    defaultSource(sourceAddress)
+    [nativeToScVal(start, { type: "u64" }), nativeToScVal(limit, { type: "u32" })],
+    defaultSource(sourceAddress),
   );
   if (!Array.isArray(listingsRaw)) {
     throw new Error(
-      `get_active_listings returned unexpected type ${typeof listingsRaw}; expected array`
+      `get_active_listings returned unexpected type ${typeof listingsRaw}; expected array`,
     );
   }
   return listingsRaw.map((listing) => parseListing(listing));
@@ -694,7 +684,7 @@ export async function getMarketStats(sourceAddress?: string): Promise<TierStats[
     CONTRACT_ADDRESSES.marketplace,
     "market_stats",
     [],
-    defaultSource(sourceAddress)
+    defaultSource(sourceAddress),
   );
   if (!Array.isArray(raw)) {
     throw new Error(`market_stats returned unexpected type ${typeof raw}; expected array`);
@@ -724,14 +714,12 @@ export interface MarketplaceConfig {
  * never hardcode the 2.5% default: the seller's "you receive" figure has to
  * mirror `buy_bot`'s split exactly.
  */
-export async function getMarketplaceConfig(
-  sourceAddress?: string
-): Promise<MarketplaceConfig> {
+export async function getMarketplaceConfig(sourceAddress?: string): Promise<MarketplaceConfig> {
   const raw = await simulateContractCall<Record<string, unknown>>(
     CONTRACT_ADDRESSES.marketplace,
     "config",
     [],
-    defaultSource(sourceAddress)
+    defaultSource(sourceAddress),
   );
   return {
     admin: String(raw?.admin ?? ""),
@@ -748,18 +736,16 @@ export async function getMarketplaceConfig(
  * RPC outage. A non-array return indicates a schema mismatch and is thrown
  * rather than silently collapsed to [].
  */
-export async function getUserListings(
-  userAddress: string
-): Promise<MarketplaceListing[]> {
+export async function getUserListings(userAddress: string): Promise<MarketplaceListing[]> {
   const listingsRaw = await simulateContractCall<Record<string, unknown>[]>(
     CONTRACT_ADDRESSES.marketplace,
     "get_user_listings",
     [nativeToScVal(userAddress, { type: "address" })],
-    userAddress
+    userAddress,
   );
   if (!Array.isArray(listingsRaw)) {
     throw new Error(
-      `get_user_listings returned unexpected type ${typeof listingsRaw}; expected array`
+      `get_user_listings returned unexpected type ${typeof listingsRaw}; expected array`,
     );
   }
   return listingsRaw.map((listing) => parseListing(listing));
@@ -778,7 +764,7 @@ export async function isRegistered(userAddress: string): Promise<boolean> {
     CONTRACT_ADDRESSES.registry,
     "is_registered",
     [nativeToScVal(userAddress, { type: "address" })],
-    userAddress
+    userAddress,
   );
   return Boolean(result);
 }
@@ -795,10 +781,9 @@ export async function bumpUserBots(userAddress: string, sourceAddress?: string):
     CONTRACT_ADDRESSES.botNft,
     "bump_user_bots",
     [nativeToScVal(userAddress, { type: "address" })],
-    source
+    source,
   );
 }
-
 
 /**
  * Get accrual state for a user from the accrual contract.
@@ -815,7 +800,7 @@ export async function getAccrualState(userAddress: string): Promise<AccrualState
       CONTRACT_ADDRESSES.accrual,
       "get_accrual_state",
       [nativeToScVal(userAddress, { type: "address" })],
-      userAddress
+      userAddress,
     );
   } catch (err) {
     if (isNotFoundError(err) || isNotRegisteredError(err)) return null;
@@ -826,14 +811,8 @@ export async function getAccrualState(userAddress: string): Promise<AccrualState
 
   return {
     last_claim_ts: toBigInt(stateRaw.last_claim_ts, "last_claim_ts"),
-    carry_points: toBigInt(
-      stateRaw.carry_points ?? stateRaw.total_claimed_points,
-      "carry_points"
-    ),
-    lifetime_points: toBigInt(
-      stateRaw.lifetime_points ?? 0n,
-      "lifetime_points"
-    ),
+    carry_points: toBigInt(stateRaw.carry_points ?? stateRaw.total_claimed_points, "carry_points"),
+    lifetime_points: toBigInt(stateRaw.lifetime_points ?? 0n, "lifetime_points"),
     rate: toBigIntOr(stateRaw.rate, 0n, "rate"),
     started_at: toBigIntOr(stateRaw.started_at, 0n, "started_at"),
   };
@@ -858,29 +837,21 @@ function parseAccrualState(raw: Record<string, unknown> | null | undefined): Acc
  * in the same order as `userAddresses`; an address with no accrual record maps
  * to `null`. Errors propagate so React Query's `isError` path fires.
  */
-export async function getAccrualStates(
-  userAddresses: string[]
-): Promise<(AccrualState | null)[]> {
+export async function getAccrualStates(userAddresses: string[]): Promise<(AccrualState | null)[]> {
   if (userAddresses.length === 0) return [];
   if (userAddresses.length > MAX_ACCRUAL_BATCH) {
     throw new Error(
-      `getAccrualStates accepts at most ${MAX_ACCRUAL_BATCH} addresses, got ${userAddresses.length}`
+      `getAccrualStates accepts at most ${MAX_ACCRUAL_BATCH} addresses, got ${userAddresses.length}`,
     );
   }
   const raw = await simulateContractCall<(Record<string, unknown> | null)[]>(
     CONTRACT_ADDRESSES.accrual,
     "get_accrual_states",
-    [
-      xdr.ScVal.scvVec(
-        userAddresses.map((address) => nativeToScVal(address, { type: "address" }))
-      ),
-    ],
-    userAddresses[0] ?? defaultSource()
+    [xdr.ScVal.scvVec(userAddresses.map((address) => nativeToScVal(address, { type: "address" })))],
+    userAddresses[0] ?? defaultSource(),
   );
   if (!Array.isArray(raw)) {
-    throw new Error(
-      `get_accrual_states returned unexpected type ${typeof raw}; expected array`
-    );
+    throw new Error(`get_accrual_states returned unexpected type ${typeof raw}; expected array`);
   }
   return raw.map((entry) => parseAccrualState(entry));
 }
@@ -897,15 +868,13 @@ export async function getAccrualStates(
  * via `useAccrualConfig()` (long `staleTime` — it only changes on
  * redeploy) rather than importing a constant.
  */
-export async function getAccrualConfig(
-  sourceAddress?: string
-): Promise<{ pointsPerAmt: number }> {
+export async function getAccrualConfig(sourceAddress?: string): Promise<{ pointsPerAmt: number }> {
   const source = defaultSource(sourceAddress);
   const raw = await simulateContractCall<Record<string, unknown>>(
     CONTRACT_ADDRESSES.accrual,
     "config",
     [],
-    source
+    source,
   );
   const pointsPerAmt = toBigInt(raw?.points_per_amt, "points_per_amt");
   return { pointsPerAmt: Number(pointsPerAmt) };
@@ -920,7 +889,7 @@ export async function getPendingPoints(userAddress: string): Promise<bigint> {
     CONTRACT_ADDRESSES.accrual,
     "pending_points",
     [nativeToScVal(userAddress, { type: "address" })],
-    userAddress
+    userAddress,
   );
   return toBigInt(raw, "pending_points");
 }
@@ -938,7 +907,7 @@ export async function claimPoints(userAddress: string): Promise<string> {
       nativeToScVal(CONTRACT_ADDRESSES.token, { type: "address" }),
       nativeToScVal(CONTRACT_ADDRESSES.registry, { type: "address" }),
     ],
-    userAddress
+    userAddress,
   );
 }
 
@@ -957,10 +926,7 @@ function isNotRegisteredError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message;
   // Registry contract error code 1 = NotRegistered (ARCHITECTURE.md §Error Codes).
-  return (
-    msg.includes("NotRegistered") ||
-    /Error\(Contract,\s*#1\b/.test(msg)
-  );
+  return msg.includes("NotRegistered") || /Error\(Contract,\s*#1\b/.test(msg);
 }
 
 /**
@@ -970,10 +936,7 @@ function isNotRegisteredError(err: unknown): boolean {
 function isNotFoundError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message;
-  return (
-    msg.includes("NotFound") ||
-    /Error\(Contract,\s*#2\b/.test(msg)
-  );
+  return msg.includes("NotFound") || /Error\(Contract,\s*#2\b/.test(msg);
 }
 
 /**
@@ -991,7 +954,7 @@ export async function getUserProfile(userAddress: string): Promise<UserProfile |
       CONTRACT_ADDRESSES.registry,
       "get_user",
       [nativeToScVal(userAddress, { type: "address" })],
-      userAddress
+      userAddress,
     );
   } catch (err) {
     if (isNotRegisteredError(err)) return null;
@@ -1008,7 +971,7 @@ export async function getUserPoints(userAddress: string): Promise<bigint> {
     CONTRACT_ADDRESSES.registry,
     "get_points",
     [nativeToScVal(userAddress, { type: "address" })],
-    userAddress
+    userAddress,
   );
   return toBigInt(raw, "points");
 }
@@ -1019,7 +982,7 @@ export async function getUserBotCount(userAddress: string): Promise<number> {
     CONTRACT_ADDRESSES.registry,
     "get_bot_count",
     [nativeToScVal(userAddress, { type: "address" })],
-    userAddress
+    userAddress,
   );
   return Number(toBigInt(raw, "bot_count"));
 }
@@ -1030,7 +993,7 @@ export async function getUserClaimedAmt(userAddress: string): Promise<bigint> {
     CONTRACT_ADDRESSES.registry,
     "get_claimed_amt",
     [nativeToScVal(userAddress, { type: "address" })],
-    userAddress
+    userAddress,
   );
   return toBigInt(raw, "claimed_amt");
 }
@@ -1049,28 +1012,22 @@ export const MAX_USERS_BATCH = 50;
  */
 export async function getUsersBatch(
   addresses: string[],
-  sourceAddress?: string
+  sourceAddress?: string,
 ): Promise<(UserProfile | null)[]> {
   if (addresses.length === 0) return [];
   if (addresses.length > MAX_USERS_BATCH) {
     throw new Error(
-      `getUsersBatch accepts at most ${MAX_USERS_BATCH} addresses, got ${addresses.length}`
+      `getUsersBatch accepts at most ${MAX_USERS_BATCH} addresses, got ${addresses.length}`,
     );
   }
   const raw = await simulateContractCall<(Record<string, unknown> | null)[]>(
     CONTRACT_ADDRESSES.registry,
     "get_users_batch",
-    [
-      xdr.ScVal.scvVec(
-        addresses.map((address) => nativeToScVal(address, { type: "address" }))
-      ),
-    ],
-    sourceAddress ?? addresses[0] ?? defaultSource()
+    [xdr.ScVal.scvVec(addresses.map((address) => nativeToScVal(address, { type: "address" })))],
+    sourceAddress ?? addresses[0] ?? defaultSource(),
   );
   if (!Array.isArray(raw)) {
-    throw new Error(
-      `get_users_batch returned unexpected type ${typeof raw}; expected array`
-    );
+    throw new Error(`get_users_batch returned unexpected type ${typeof raw}; expected array`);
   }
   return raw.map((entry) => (entry ? parseUserProfile(entry) : null));
 }
@@ -1085,9 +1042,10 @@ export async function getUserBots(userAddress: string): Promise<bigint[]> {
     CONTRACT_ADDRESSES.botNft,
     "get_user_bots",
     [nativeToScVal(userAddress, { type: "address" })],
-    userAddress
+    userAddress,
   );
-  if (!Array.isArray(raw)) throw new Error(`get_user_bots returned unexpected type ${typeof raw}; expected array`);
+  if (!Array.isArray(raw))
+    throw new Error(`get_user_bots returned unexpected type ${typeof raw}; expected array`);
   return raw.map((id) => toBigInt(id, "bot_id"));
 }
 
@@ -1102,9 +1060,12 @@ export async function getUserBotsDetailed(userAddress: string): Promise<BotNFT[]
     CONTRACT_ADDRESSES.botNft,
     "get_user_bots_detailed",
     [nativeToScVal(userAddress, { type: "address" })],
-    userAddress
+    userAddress,
   );
-  if (!Array.isArray(raw)) throw new Error(`get_user_bots_detailed returned unexpected type ${typeof raw}; expected array`);
+  if (!Array.isArray(raw))
+    throw new Error(
+      `get_user_bots_detailed returned unexpected type ${typeof raw}; expected array`,
+    );
   return raw.map((entry) => parseBotNFT(entry));
 }
 
@@ -1117,7 +1078,7 @@ export async function getBotById(userAddress: string, botId: bigint): Promise<Bo
     CONTRACT_ADDRESSES.botNft,
     "get_bot",
     [nativeToScVal(botId, { type: "u64" })],
-    userAddress
+    userAddress,
   );
   return raw ? parseBotNFT(raw) : null;
 }
@@ -1131,11 +1092,10 @@ export async function getUserTotalRate(userAddress: string): Promise<bigint> {
     CONTRACT_ADDRESSES.botNft,
     "get_user_total_rate",
     [nativeToScVal(userAddress, { type: "address" })],
-    userAddress
+    userAddress,
   );
   return toBigInt(raw, "get_user_total_rate");
 }
-
 
 /**
  * Return up to `limit` bots (max 100) with IDs in `[startId, startId + limit)`,
@@ -1144,14 +1104,14 @@ export async function getUserTotalRate(userAddress: string): Promise<bigint> {
 export async function getBotsRange(
   startId: bigint,
   limit: number,
-  sourceAddress?: string
+  sourceAddress?: string,
 ): Promise<BotNFT[]> {
   const source = defaultSource(sourceAddress);
   const raw = await simulateContractCall(
     CONTRACT_ADDRESSES.botNft,
     "get_bots_range",
     [nativeToScVal(startId, { type: "u64" }), nativeToScVal(limit, { type: "u32" })],
-    source
+    source,
   );
   if (!Array.isArray(raw)) {
     throw new Error(`get_bots_range returned unexpected type ${typeof raw}; expected array`);
@@ -1172,12 +1132,10 @@ export async function getAllTiers(sourceAddress?: string): Promise<Record<BotTie
     CONTRACT_ADDRESSES.botNft,
     "all_tiers",
     [],
-    source
+    source,
   );
   if (!Array.isArray(raw) || raw.length !== 5) {
-    throw new Error(
-      `all_tiers returned unexpected shape; expected array of 5 TierInfo structs`
-    );
+    throw new Error(`all_tiers returned unexpected shape; expected array of 5 TierInfo structs`);
   }
   const entries = TIER_ORDER.map((tier, index): [BotTier, TierInfo] => {
     const item = raw[index];
@@ -1294,10 +1252,20 @@ export function preflight(sourceAddress?: string): Promise<PreflightReport> {
       method: string;
       args: xdr.ScVal[];
     }> = [
-      { name: "registry", contractId: CONTRACT_ADDRESSES.registry, method: "total_users", args: [] },
+      {
+        name: "registry",
+        contractId: CONTRACT_ADDRESSES.registry,
+        method: "total_users",
+        args: [],
+      },
       { name: "botNft", contractId: CONTRACT_ADDRESSES.botNft, method: "admin", args: [] },
       { name: "accrual", contractId: CONTRACT_ADDRESSES.accrual, method: "admin", args: [] },
-      { name: "marketplace", contractId: CONTRACT_ADDRESSES.marketplace, method: "next_listing_id", args: [] },
+      {
+        name: "marketplace",
+        contractId: CONTRACT_ADDRESSES.marketplace,
+        method: "next_listing_id",
+        args: [],
+      },
       { name: "token", contractId: CONTRACT_ADDRESSES.token, method: "decimals", args: [] },
     ];
 
@@ -1316,7 +1284,7 @@ export function preflight(sourceAddress?: string): Promise<PreflightReport> {
             error,
           };
         }
-      })
+      }),
     );
 
     return { ok: results.every((r) => r.ok), results };

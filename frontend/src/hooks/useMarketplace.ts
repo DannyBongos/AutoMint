@@ -5,6 +5,8 @@ import {
   getMarketStats,
   getMarketplaceConfig,
   buildListBotArgs,
+  getTokenDecimals,
+  getTokenSymbol,
 } from "@/lib/contracts";
 import { runTxWithToasts } from "@/lib/transaction";
 import { useWalletStore, selectPublicKey } from "@/store/walletStore";
@@ -63,7 +65,7 @@ export function useBuyBot() {
     onError: (
       error: Error,
       _variables: bigint,
-      context: { previousListings: unknown; previousMyListings: unknown } | undefined
+      context: { previousListings: unknown; previousMyListings: unknown } | undefined,
     ) => {
       track("marketplace_buy_failed", errorAnalyticsProps(error));
       if (context) {
@@ -98,10 +100,7 @@ export function useMintTierBot() {
       return runTxWithToasts({
         contractId: CONTRACT_ADDRESSES.botNft,
         method: "mint_tier",
-        args: [
-          nativeToScVal(publicKey, { type: "address" }),
-          xdr.ScVal.scvU32(tierIndex),
-        ],
+        args: [nativeToScVal(publicKey, { type: "address" }), xdr.ScVal.scvU32(tierIndex)],
         sourceAddress: publicKey,
         id: "mint_tier",
         label: "mint",
@@ -199,19 +198,17 @@ export function useListBot() {
       const previousBots = queryClient.getQueryData(qk.bots(publicKey));
       const previousDashboard = queryClient.getQueryData(qk.dashboard(publicKey));
       queryClient.setQueryData(qk.bots(publicKey), (old: bigint[] | undefined) =>
-        old ? old.filter((id) => id !== botId) : old
+        old ? old.filter((id) => id !== botId) : old,
       );
-      queryClient.setQueryData(
-        qk.dashboard(publicKey),
-        (old: DashboardData | undefined) =>
-          old ? { ...old, bots: old.bots.filter((id) => id !== botId) } : old
+      queryClient.setQueryData(qk.dashboard(publicKey), (old: DashboardData | undefined) =>
+        old ? { ...old, bots: old.bots.filter((id) => id !== botId) } : old,
       );
       return { previousBots, previousDashboard };
     },
     onError: (
       error: Error,
       _variables: { botId: bigint; price: bigint },
-      context: { previousBots: unknown; previousDashboard: unknown } | undefined
+      context: { previousBots: unknown; previousDashboard: unknown } | undefined,
     ) => {
       if (context) {
         queryClient.setQueryData(qk.bots(publicKey), context.previousBots);
@@ -265,7 +262,7 @@ export function useCancelListing() {
     onError: (
       error: Error,
       _variables: bigint,
-      context: { previousListings: unknown; previousMyListings: unknown } | undefined
+      context: { previousListings: unknown; previousMyListings: unknown } | undefined,
     ) => {
       if (context) {
         queryClient.setQueryData(qk.listings(), context.previousListings);
@@ -280,5 +277,37 @@ export function useCancelListing() {
       queryClient.invalidateQueries({ queryKey: qk.bots(publicKey) });
       queryClient.invalidateQueries({ queryKey: ["botDetails"] });
     },
+  });
+}
+
+/**
+ * Fetch the `decimals()` of an arbitrary SEP-41 currency contract.
+ * Results are cached permanently (`STALE_TIME.STATIC`) — token decimals are
+ * immutable after deployment.
+ */
+export function useTokenDecimals(contractId: string | undefined) {
+  const publicKey = useWalletStore(selectPublicKey);
+  return useQuery<number>({
+    queryKey: qk.tokenDecimals(contractId ?? ""),
+    queryFn: () => getTokenDecimals(contractId!, publicKey ?? undefined),
+    enabled: Boolean(contractId),
+    staleTime: STALE_TIME.STATIC,
+    gcTime: GC_TIME.LONG,
+  });
+}
+
+/**
+ * Fetch the `symbol()` of an arbitrary SEP-41 currency contract.
+ * Falls back to a truncated address if the contract does not expose `symbol`.
+ * Cached permanently — token symbols are immutable after deployment.
+ */
+export function useTokenSymbol(contractId: string | undefined) {
+  const publicKey = useWalletStore(selectPublicKey);
+  return useQuery<string>({
+    queryKey: qk.tokenSymbol(contractId ?? ""),
+    queryFn: () => getTokenSymbol(contractId!, publicKey ?? undefined),
+    enabled: Boolean(contractId),
+    staleTime: STALE_TIME.STATIC,
+    gcTime: GC_TIME.LONG,
   });
 }

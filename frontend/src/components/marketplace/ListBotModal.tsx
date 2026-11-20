@@ -3,8 +3,14 @@
 import { useState, useMemo, useId } from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { useListBot, useMarketplaceConfig } from "@/hooks/useMarketplace";
-import { xlmToStroops, stroopsToXlm, XLM_DECIMALS } from "@/lib/format";
+import {
+  useListBot,
+  useMarketplaceConfig,
+  useTokenDecimals,
+  useTokenSymbol,
+} from "@/hooks/useMarketplace";
+import { toBaseUnits, fromBaseUnits } from "@/lib/format";
+import { CONTRACT_ADDRESSES } from "@/lib/constants";
 import type { BotNFT } from "@/types";
 import clsx from "clsx";
 
@@ -13,7 +19,7 @@ import clsx from "clsx";
 const Modal = dynamic(() => import("@/components/ui/Modal"), { ssr: false });
 
 const BPS_DENOMINATOR = 10_000n;
-const MAX_PRICE_XLM = 100_000_000;
+const MAX_PRICE_DISPLAY = 100_000_000;
 
 /** `amount * bps / 10_000`, exactly as the contract's `bps_of` helper. */
 function bpsOf(amount: bigint, bps: number): bigint {
@@ -32,92 +38,119 @@ interface ListBotModalProps {
 }
 
 export default function ListBotModal({ bot, isOpen, onClose }: ListBotModalProps) {
-  const [priceXlm, setPriceXlm] = useState("");
+  const [priceInput, setPriceInput] = useState("");
   const [touched, setTouched] = useState(false);
   const listBot = useListBot();
   const { data: config } = useMarketplaceConfig();
   const priceInputId = useId();
 
-  // Validate decimal precision, minimum and maximum against AM-122 and Stellar 7 decimals
+  // The listing currency is the configured payment token (AMT by default).
+  // Read its decimals and symbol from the contract so the UI reflects the
+  // actual token rather than assuming XLM.
+  const currency = CONTRACT_ADDRESSES.token;
+  const { data: tokenDecimals = 7 } = useTokenDecimals(currency);
+  const { data: tokenSymbol = "AMT" } = useTokenSymbol(currency);
+
+  // Validate decimal precision, minimum and maximum.
   const validation = useMemo(() => {
-    const trimmed = priceXlm.trim();
+    const trimmed = priceInput.trim();
     if (!trimmed) {
-      return { isValid: false, error: "Please enter a listing price in XLM.", reason: "Enter a price to enable listing." };
+      return {
+        isValid: false,
+        error: `Please enter a listing price in ${tokenSymbol}.`,
+        reason: "Enter a price to enable listing.",
+      };
     }
 
     const num = Number(trimmed);
     if (isNaN(num) || !isFinite(num)) {
-      return { isValid: false, error: "Price must be a valid number.", reason: "Price must be a valid number." };
-    }
-
-    if (num <= 0) {
-      return { isValid: false, error: "Price must be greater than 0 XLM (minimum 0.0000001 XLM).", reason: "Price must be greater than 0 XLM." };
-    }
-
-    if (num > MAX_PRICE_XLM) {
-      return { isValid: false, error: `Price cannot exceed ${MAX_PRICE_XLM.toLocaleString("en-US")} XLM.`, reason: "Price exceeds maximum allowed amount." };
-    }
-
-    const parts = trimmed.split(".");
-    if (parts.length > 1 && (parts[1]?.length ?? 0) > XLM_DECIMALS) {
       return {
         isValid: false,
-        error: `Price cannot exceed ${XLM_DECIMALS} decimal places (Stellar token precision limit).`,
-        reason: `Maximum ${XLM_DECIMALS} decimal places allowed.`,
+        error: "Price must be a valid number.",
+        reason: "Price must be a valid number.",
       };
     }
 
-    const stroops = xlmToStroops(trimmed);
-    if (stroops <= 0n) {
-      return { isValid: false, error: "Price must be at least 1 stroop (0.0000001 XLM).", reason: "Price too low." };
+    if (num <= 0) {
+      return {
+        isValid: false,
+        error: `Price must be greater than 0 ${tokenSymbol}.`,
+        reason: `Price must be greater than 0 ${tokenSymbol}.`,
+      };
     }
 
-    return { isValid: true, error: null, reason: null, stroops, num };
-  }, [priceXlm]);
+    if (num > MAX_PRICE_DISPLAY) {
+      return {
+        isValid: false,
+        error: `Price cannot exceed ${MAX_PRICE_DISPLAY.toLocaleString("en-US")} ${tokenSymbol}.`,
+        reason: "Price exceeds maximum allowed amount.",
+      };
+    }
 
-  // Live fee breakdown in exact stroops, mirroring `buy_bot` on-chain:
+    const parts = trimmed.split(".");
+    if (parts.length > 1 && (parts[1]?.length ?? 0) > tokenDecimals) {
+      return {
+        isValid: false,
+        error: `Price cannot exceed ${tokenDecimals} decimal places (token precision limit).`,
+        reason: `Maximum ${tokenDecimals} decimal places allowed.`,
+      };
+    }
+
+    const baseUnits = toBaseUnits(trimmed, tokenDecimals);
+    if (baseUnits <= 0n) {
+      return {
+        isValid: false,
+        error: `Price must be at least 1 base unit (0.${"0".repeat(tokenDecimals - 1)}1 ${tokenSymbol}).`,
+        reason: "Price too low.",
+      };
+    }
+
+    return { isValid: true, error: null, reason: null, baseUnits, num };
+  }, [priceInput, tokenDecimals, tokenSymbol]);
+
+  // Live fee breakdown in exact base units, mirroring `buy_bot` on-chain:
   // platform fee = price * fee_bps / 10_000, creator royalty = price *
   // royalty_bps / 10_000 (paid only when the seller is not the original
   // minter), seller payout = price - platform fee - royalty. Both rates come
   // from the marketplace's config() so an admin `set_fee_bps` is reflected.
   const feeBreakdown = useMemo(() => {
-    if (!validation.isValid || !validation.stroops || !config) {
+    if (!validation.isValid || !validation.baseUnits || !config) {
       return null;
     }
-    const priceStroops = validation.stroops;
-    const feeStroops = bpsOf(priceStroops, config.feeBps);
+    const priceBase = validation.baseUnits;
+    const feeBase = bpsOf(priceBase, config.feeBps);
     const payRoyalty = config.royaltyBps > 0 && (bot.minter ?? bot.owner) !== bot.owner;
-    const royaltyStroops = payRoyalty ? bpsOf(priceStroops, config.royaltyBps) : 0n;
-    const netStroops = priceStroops - feeStroops - royaltyStroops;
+    const royaltyBase = payRoyalty ? bpsOf(priceBase, config.royaltyBps) : 0n;
+    const netBase = priceBase - feeBase - royaltyBase;
 
     return {
-      priceStroops,
-      feeStroops,
-      royaltyStroops,
-      netStroops,
+      priceBase,
+      feeBase,
+      royaltyBase,
+      netBase,
       feePercent: bpsToPercent(config.feeBps),
       royaltyPercent: payRoyalty ? bpsToPercent(config.royaltyBps) : 0,
       netPercent: bpsToPercent(10_000 - config.feeBps - (payRoyalty ? config.royaltyBps : 0)),
-      priceXlm: validation.num,
-      feeXlm: stroopsToXlm(feeStroops),
-      royaltyXlm: stroopsToXlm(royaltyStroops),
-      netXlm: stroopsToXlm(netStroops),
+      priceDisplay: validation.num,
+      feeDisplay: fromBaseUnits(feeBase, tokenDecimals),
+      royaltyDisplay: fromBaseUnits(royaltyBase, tokenDecimals),
+      netDisplay: fromBaseUnits(netBase, tokenDecimals),
     };
-  }, [validation, config, bot.minter, bot.owner]);
+  }, [validation, config, bot.minter, bot.owner, tokenDecimals]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTouched(true);
 
-    if (!validation.isValid || !validation.stroops) return;
+    if (!validation.isValid || !validation.baseUnits) return;
 
     listBot.mutate(
-      { botId: bot.id, price: validation.stroops },
+      { botId: bot.id, price: validation.baseUnits },
       {
         onSuccess: () => {
-          toast.success(`${bot.nickname ?? bot.tier} listed for ${priceXlm} XLM`);
+          toast.success(`${bot.nickname ?? bot.tier} listed for ${priceInput} ${tokenSymbol}`);
           onClose();
-          setPriceXlm("");
+          setPriceInput("");
           setTouched(false);
         },
       },
@@ -133,7 +166,11 @@ export default function ListBotModal({ bot, isOpen, onClose }: ListBotModalProps
     .join(" ");
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`List ${bot.nickname ?? bot.tier} Bot for Sale`}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`List ${bot.nickname ?? bot.tier} Bot for Sale`}
+    >
       <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
         {/* Price input field with associated label, help text, and error linkage */}
         <div className="flex flex-col gap-1.5">
@@ -142,7 +179,10 @@ export default function ListBotModal({ bot, isOpen, onClose }: ListBotModalProps
             id={`${priceInputId}-label`}
             className="text-sm font-medium text-text"
           >
-            Listing Price (XLM) <span className="text-gold" aria-hidden="true">*</span>
+            Listing Price ({tokenSymbol}){" "}
+            <span className="text-gold" aria-hidden="true">
+              *
+            </span>
           </label>
 
           <div className="relative">
@@ -150,10 +190,10 @@ export default function ListBotModal({ bot, isOpen, onClose }: ListBotModalProps
               id={priceInputId}
               type="text"
               inputMode="decimal"
-              placeholder="0.0000000"
-              value={priceXlm}
+              placeholder={"0." + "0".repeat(tokenDecimals)}
+              value={priceInput}
               onChange={(e) => {
-                setPriceXlm(e.target.value);
+                setPriceInput(e.target.value);
                 if (!touched) setTouched(true);
               }}
               onBlur={() => setTouched(true)}
@@ -166,16 +206,16 @@ export default function ListBotModal({ bot, isOpen, onClose }: ListBotModalProps
                 "focus:outline-none focus:ring-2",
                 touched && validation.error
                   ? "border-red-500/50 focus:border-red-500 focus:ring-red-500/30"
-                  : "border-liner focus:border-gold/50 focus:ring-gold/30"
+                  : "border-liner focus:border-gold/50 focus:ring-gold/30",
               )}
             />
             <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-semibold text-muted text-sm">
-              XLM
+              {tokenSymbol}
             </div>
           </div>
 
           <p id={`${priceInputId}-help`} className="text-xs text-muted">
-            Enter price in XLM (min 0.0000001 XLM, max 7 decimal places).
+            Enter price in {tokenSymbol} (min {tokenDecimals} decimal places precision).
           </p>
 
           {touched && validation.error && (
@@ -199,23 +239,29 @@ export default function ListBotModal({ bot, isOpen, onClose }: ListBotModalProps
           >
             <div className="flex items-center justify-between text-muted text-xs sm:text-sm">
               <span>Listing Price</span>
-              <span className="font-mono text-text">{priceXlm} XLM</span>
+              <span className="font-mono text-text">
+                {priceInput} {tokenSymbol}
+              </span>
             </div>
             <div className="mt-1.5 flex items-center justify-between text-muted text-xs sm:text-sm">
               <span>Marketplace Fee ({feeBreakdown.feePercent}%)</span>
-              <span className="font-mono text-pink">-{feeBreakdown.feeXlm.toFixed(7)} XLM</span>
+              <span className="font-mono text-pink">
+                -{feeBreakdown.feeDisplay.toFixed(tokenDecimals)} {tokenSymbol}
+              </span>
             </div>
-            {feeBreakdown.royaltyStroops > 0n && (
+            {feeBreakdown.royaltyBase > 0n && (
               <div className="mt-1.5 flex items-center justify-between text-muted text-xs sm:text-sm">
                 <span>Creator Royalty ({feeBreakdown.royaltyPercent}%)</span>
                 <span className="font-mono text-pink">
-                  -{feeBreakdown.royaltyXlm.toFixed(7)} XLM
+                  -{feeBreakdown.royaltyDisplay.toFixed(tokenDecimals)} {tokenSymbol}
                 </span>
               </div>
             )}
             <div className="mt-2.5 flex items-center justify-between border-t border-liner pt-2.5 font-semibold text-text">
               <span>You Receive ({feeBreakdown.netPercent}%)</span>
-              <span className="font-mono text-green">{feeBreakdown.netXlm.toFixed(7)} XLM</span>
+              <span className="font-mono text-green">
+                {feeBreakdown.netDisplay.toFixed(tokenDecimals)} {tokenSymbol}
+              </span>
             </div>
           </div>
         )}
@@ -229,7 +275,7 @@ export default function ListBotModal({ bot, isOpen, onClose }: ListBotModalProps
             aria-describedby={!validation.isValid ? `${priceInputId}-disabled-reason` : undefined}
             className={clsx(
               "btn-primary w-full py-3 text-base font-semibold transition-all",
-              "disabled:cursor-not-allowed disabled:opacity-50"
+              "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
             {listBot.isPending ? "Listing Bot…" : "List for Sale"}

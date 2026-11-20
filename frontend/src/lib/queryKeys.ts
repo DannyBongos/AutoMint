@@ -21,8 +21,7 @@ import type { QueryKey } from "@tanstack/react-query";
  * Single source of truth for the dashboard poll cadence (#495).
  * Override with `NEXT_PUBLIC_DASHBOARD_POLL_MS`.
  */
-export const DASHBOARD_POLL_MS =
-  Number(process.env.NEXT_PUBLIC_DASHBOARD_POLL_MS) || 30_000;
+export const DASHBOARD_POLL_MS = Number(process.env.NEXT_PUBLIC_DASHBOARD_POLL_MS) || 30_000;
 
 /**
  * Freshness windows, declared once and referenced at each query definition
@@ -84,6 +83,8 @@ export const qk = {
   accrualConfig: (): QueryKey => ["accrualConfig"],
   amtBalance: (address: string | null): QueryKey => ["amtBalance", address],
   amtDecimals: (): QueryKey => ["amtDecimals"],
+  tokenDecimals: (contractId: string): QueryKey => ["tokenDecimals", contractId],
+  tokenSymbol: (contractId: string): QueryKey => ["tokenSymbol", contractId],
   tiers: (): QueryKey => ["tiers"],
   dashboard: (address: string | null): QueryKey => ["dashboard", address],
   listings: (): QueryKey => ["listings"],

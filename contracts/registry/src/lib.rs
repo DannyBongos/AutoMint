@@ -64,9 +64,10 @@ pub enum DataKey {
     /// ever-growing instance vector.
     PageCount,
     /// Per-season bounded leaderboard (#371): same `Vec<(Address, u64)>`
-    /// shape as [`DataKey::TopUsers`], keyed by season, so historical seasons
-    /// stay queryable after a new season starts. Instance storage, like
-    /// `TopUsers`, so the boards live as long as the contract instance.
+    /// shape as [`DataKey::TopUsers`], keyed by season. The **current** season
+    /// is kept in instance storage for fast incremental updates; completed
+    /// seasons are migrated to persistent storage (with TTL bumps) by
+    /// `start_new_season`, so only one instance-storage vector grows over time.
     SeasonTop(u32),
     /// Current season counter (#371). Instance storage; absent = season 0.
     Season,
@@ -621,9 +622,10 @@ impl RegistryContract {
     pub fn add_points(env: Env, user: Address, points: u64) -> Result<(), RegistryError> {
         // #318: only the configured accrual writer may mutate points.
         Self::require_accrual(&env)?;
-        // SECURITY NOTE: This function modifies user state. It should only be called
-        // from the accrual contract (which has already verified user authorization).
-        // In a production deployment, consider validating caller identity.
+        // SECURITY NOTE: `require_accrual` enforces the writer gate when
+        // `set_writers` has been called. Until that call is made the gate is
+        // fail-open for backward compatibility — lock it down by calling
+        // `set_writers` before opening the contract to production traffic.
         let mut profile: UserProfile = env
             .storage()
             .persistent()
@@ -714,9 +716,10 @@ impl RegistryContract {
     pub fn increment_bot_count(env: Env, user: Address) -> Result<(), RegistryError> {
         // #318: only the configured bot_nft writer may mutate bot counts.
         Self::require_bot_nft(&env)?;
-        // SECURITY NOTE: This function modifies user state. It should only be called
-        // from the bot_nft contract (which has already verified user authorization).
-        // In a production deployment, consider validating caller identity.
+        // SECURITY NOTE: `require_bot_nft` enforces the writer gate when
+        // `set_writers` has been called. Until that call is made the gate is
+        // fail-open for backward compatibility — lock it down by calling
+        // `set_writers` before opening the contract to production traffic.
         let mut profile: UserProfile = env
             .storage()
             .persistent()
@@ -766,9 +769,10 @@ impl RegistryContract {
         if amount < 0 {
             return Err(RegistryError::NegativeAmount);
         }
-        // SECURITY NOTE: This function modifies user state. It should only be called
-        // from the accrual contract (which has already verified user authorization).
-        // In a production deployment, consider validating caller identity.
+        // SECURITY NOTE: `require_accrual` enforces the writer gate when
+        // `set_writers` has been called. Until that call is made the gate is
+        // fail-open for backward compatibility — lock it down by calling
+        // `set_writers` before opening the contract to production traffic.
         let mut profile: UserProfile = env
             .storage()
             .persistent()
@@ -894,15 +898,29 @@ impl RegistryContract {
         env.storage().instance().get(&DataKey::Season).unwrap_or(0)
     }
 
+    /// Load a season's leaderboard. The current season lives in instance
+    /// storage; completed (past) seasons were migrated to persistent storage
+    /// by `start_new_season` so instance storage does not accumulate a new
+    /// vector on every season rollover.
     fn load_season_top(env: &Env, season: u32) -> Vec<(Address, u64)> {
-        env.storage()
-            .instance()
-            .get(&DataKey::SeasonTop(season))
-            .unwrap_or_else(|| Vec::new(env))
+        let current = Self::current_season(env);
+        if season == current {
+            env.storage()
+                .instance()
+                .get(&DataKey::SeasonTop(season))
+                .unwrap_or_else(|| Vec::new(env))
+        } else {
+            env.storage()
+                .persistent()
+                .get(&DataKey::SeasonTop(season))
+                .unwrap_or_else(|| Vec::new(env))
+        }
     }
 
     /// Incrementally maintain the bounded top-N list for one season (#371),
-    /// sharing the lifetime board's eviction/tie semantics.
+    /// sharing the lifetime board's eviction/tie semantics. Writes only to
+    /// instance storage; past seasons are read-only after `start_new_season`
+    /// moves them to persistent storage.
     fn update_season_top(env: &Env, season: u32, user: &Address, new_total: u64) {
         let mut top = Self::load_season_top(env, season);
         if Self::apply_to_top(env, &mut top, user, new_total) {
@@ -969,7 +987,13 @@ impl RegistryContract {
     /// user)`, so a fresh season number means every user starts from zero
     /// while lifetime `total_points` and every past season's board
     /// (`SeasonTop`/`SeasonPoints` keyed by the old number) remain intact and
-    /// queryable. Returns the new season number and emits `newseason`.
+    /// queryable.
+    ///
+    /// The outgoing season's `SeasonTop` is moved from instance storage to
+    /// persistent storage (with a TTL bump) so that only the current season's
+    /// vector lives in instance storage. This bounds instance-storage growth to
+    /// one `LEADERBOARD_SIZE` vector regardless of how many seasons have run.
+    /// Returns the new season number and emits `newseason`.
     pub fn start_new_season(env: Env) -> Result<u32, RegistryError> {
         let admin = env
             .storage()
@@ -978,9 +1002,32 @@ impl RegistryContract {
             .ok_or(RegistryError::NotInitialized)?;
         admin.require_auth();
 
-        let season = Self::current_season(&env)
+        let old_season = Self::current_season(&env);
+        let season = old_season
             .checked_add(1)
             .ok_or(RegistryError::Overflow)?;
+
+        // Migrate the outgoing season's leaderboard from instance to persistent
+        // storage before the counter advances, so `load_season_top` still reads
+        // from instance storage for the old season at this point.
+        let old_top: Vec<(Address, u64)> = env
+            .storage()
+            .instance()
+            .get(&DataKey::SeasonTop(old_season))
+            .unwrap_or_else(|| Vec::new(&env));
+        env.storage()
+            .persistent()
+            .set(&DataKey::SeasonTop(old_season), &old_top);
+        env.storage().persistent().extend_ttl(
+            &DataKey::SeasonTop(old_season),
+            LEDGER_THRESHOLD,
+            LEDGER_BUMP,
+        );
+        // Drop the now-migrated copy from instance storage.
+        env.storage()
+            .instance()
+            .remove(&DataKey::SeasonTop(old_season));
+
         env.storage().instance().set(&DataKey::Season, &season);
         env.storage()
             .instance()
@@ -993,6 +1040,8 @@ impl RegistryContract {
     /// maintained `SeasonTop(season)` list — same bounded, O(LEADERBOARD_SIZE)
     /// hydration as [`Self::get_leaderboard`] — so the cost does not depend on
     /// the total number of users, and historical seasons stay queryable.
+    /// Current-season data is in instance storage; past seasons are in
+    /// persistent storage, migrated by `start_new_season`.
     /// Equal season totals are ordered by who reached the total first.
     pub fn get_leaderboard_for_season(env: Env, season: u32, limit: u32) -> Vec<SeasonEntry> {
         let mut result: Vec<SeasonEntry> = Vec::new(&env);

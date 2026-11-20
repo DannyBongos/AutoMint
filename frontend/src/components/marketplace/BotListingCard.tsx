@@ -4,15 +4,10 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Bot, ShoppingCart, X, Zap, Tag } from "lucide-react";
 import clsx from "clsx";
-import {
-  BotTier,
-  BOT_TIER_NAMES,
-  BOT_TIER_COLORS,
-  BOT_TIER_BG_COLORS,
-  TIER_META,
-} from "@/types";
+import { BotTier, BOT_TIER_NAMES, BOT_TIER_COLORS, BOT_TIER_BG_COLORS, TIER_META } from "@/types";
 import type { MarketplaceListing, BotNFT, UserProfile } from "@/types";
-import { stroopsToXlm } from "@/lib/format";
+import { fromBaseUnits } from "@/lib/format";
+import { useTokenDecimals, useTokenSymbol } from "@/hooks/useMarketplace";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 interface BotListingCardProps {
@@ -52,10 +47,15 @@ export default function BotListingCard({
   const tierColor = BOT_TIER_COLORS[tier] ?? "text-muted";
   const tierBg = BOT_TIER_BG_COLORS[tier] ?? "bg-muted/20";
   const tierMeta = TIER_META[tier];
-  const priceXlm = stroopsToXlm(listing.price);
+
+  // Read the listing's currency contract to format the price with the correct
+  // decimals and symbol instead of assuming XLM.
+  const { data: currencyDecimals = 7 } = useTokenDecimals(listing.currency);
+  const { data: currencySymbol = "…" } = useTokenSymbol(listing.currency);
+  const priceDisplay = fromBaseUnits(listing.price, currencyDecimals);
+
   const isOwner =
-    connectedAddress !== null &&
-    listing.seller.toLowerCase() === connectedAddress.toLowerCase();
+    connectedAddress !== null && listing.seller.toLowerCase() === connectedAddress.toLowerCase();
   const botLabel = `${bot?.nickname || tierName} Bot #${bot?.id?.toString() || listing.bot_id.toString()}`;
 
   const [isBuyingConfirmed, setIsBuyingConfirmed] = useState(false);
@@ -81,7 +81,7 @@ export default function BotListingCard({
           <div
             className={clsx(
               "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl",
-              tierBg
+              tierBg,
             )}
             aria-hidden="true"
           >
@@ -91,7 +91,9 @@ export default function BotListingCard({
             <p className="truncate font-display text-sm font-semibold text-text">
               {bot?.nickname || tierName} Bot
             </p>
-            <p className="text-xs text-muted">#{bot?.id?.toString() || listing.bot_id.toString()}</p>
+            <p className="text-xs text-muted">
+              #{bot?.id?.toString() || listing.bot_id.toString()}
+            </p>
           </div>
         </div>
 
@@ -100,7 +102,7 @@ export default function BotListingCard({
             "inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5",
             "text-xs font-medium",
             tierBg,
-            tierColor
+            tierColor,
           )}
         >
           {tierName} tier
@@ -112,9 +114,7 @@ export default function BotListingCard({
         <div className="flex items-center gap-2 rounded-lg bg-card-2 px-3 py-2">
           <Zap className="h-3.5 w-3.5 shrink-0 text-gold" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wider text-muted">
-              Rate
-            </p>
+            <p className="text-[10px] uppercase tracking-wider text-muted">Rate</p>
             <p className="text-sm font-semibold text-text">
               {bot ? bot.accrual_rate.toString() : "—"}{" "}
               <span className="text-xs font-normal text-muted">pt/hr</span>
@@ -125,12 +125,10 @@ export default function BotListingCard({
         <div className="flex items-center gap-2 rounded-lg bg-card-2 px-3 py-2">
           <Tag className="h-3.5 w-3.5 shrink-0 text-green" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wider text-muted">
-              Price
-            </p>
+            <p className="text-[10px] uppercase tracking-wider text-muted">Price</p>
             <p className="text-sm font-semibold text-text">
-              {priceXlm.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
-              <span className="text-xs font-normal text-muted">XLM</span>
+              {priceDisplay.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
+              <span className="text-xs font-normal text-muted">{currencySymbol}</span>
             </p>
           </div>
         </div>
@@ -138,24 +136,23 @@ export default function BotListingCard({
 
       {/* Seller */}
       <div className="flex items-center justify-between gap-2 rounded-lg bg-card-2 px-3 py-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted">
-          Seller
-        </span>
+        <span className="text-[10px] uppercase tracking-wider text-muted">Seller</span>
         <span
           className="truncate font-mono text-xs text-text"
           title={listing.seller}
           aria-label={`Seller address ${listing.seller}`}
           data-testid={`listing-seller-${listing.id.toString()}`}
         >
-          {sellerProfile?.display_name || sellerProfile?.username || sellerUsername || truncateAddress(listing.seller)}
+          {sellerProfile?.display_name ||
+            sellerProfile?.username ||
+            sellerUsername ||
+            truncateAddress(listing.seller)}
         </span>
       </div>
 
       {/* Currency (#476) — the contract's token address for this listing's price. */}
       <div className="flex items-center justify-between gap-2 rounded-lg bg-card-2 px-3 py-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted">
-          Currency
-        </span>
+        <span className="text-[10px] uppercase tracking-wider text-muted">Currency</span>
         <span
           className="truncate font-mono text-xs text-text"
           title={listing.currency}
@@ -172,7 +169,7 @@ export default function BotListingCard({
             isOpen={isCancellingConfirmed}
             onClose={() => setIsCancellingConfirmed(false)}
             title="Cancel Listing"
-            description={`Are you sure you want to cancel listing ${botLabel} for ${priceXlm} XLM?`}
+            description={`Are you sure you want to cancel listing ${botLabel} for ${priceDisplay.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currencySymbol}?`}
             onConfirm={() => onCancel(listing.id)}
             confirmText="Cancel"
             cancelText="Keep Listed"
@@ -204,7 +201,7 @@ export default function BotListingCard({
             isOpen={isBuyingConfirmed}
             onClose={() => setIsBuyingConfirmed(false)}
             title="Buy Bot"
-            description={`Are you sure you want to buy ${botLabel} for ${priceXlm} XLM?`}
+            description={`Are you sure you want to buy ${botLabel} for ${priceDisplay.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currencySymbol}?`}
             onConfirm={() => onBuy(listing.id)}
             confirmText="Buy"
             cancelText="Keep Browsing"
@@ -218,8 +215,8 @@ export default function BotListingCard({
               !connectedAddress
                 ? `Connect your wallet to buy ${botLabel}`
                 : isBuying
-                ? `Buying ${botLabel}`
-                : `Buy ${botLabel} for ${priceXlm.toLocaleString("en-US", { maximumFractionDigits: 2 })} XLM`
+                  ? `Buying ${botLabel}`
+                  : `Buy ${botLabel} for ${priceDisplay.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currencySymbol}`
             }
             title={!connectedAddress ? "Connect your wallet to buy" : undefined}
             className={clsx(
