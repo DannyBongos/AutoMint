@@ -111,3 +111,12 @@ export const useTxStore = create<TxState>()(
 );
 
 export const selectTransactions = (s: TxState): TxRecord[] => s.transactions;
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (event.key === TX_HISTORY_STORAGE_KEY || event.key === null) {
+      void useTxStore.persist.rehydrate();
+    }
+  });
+}
+

@@ -126,3 +126,12 @@ export const selectSetNetworkMismatch = (s: WalletState) => s.setNetworkMismatch
 export const selectSetError = (s: WalletState) => s.setError;
 export const selectDisconnect = (s: WalletState) => s.disconnect;
 export const selectClearPersistedSession = (s: WalletState) => s.clearPersistedSession;
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (event.key === WALLET_PERSIST_KEY || event.key === null) {
+      void useWalletStore.persist.rehydrate();
+    }
+  });
+}
+

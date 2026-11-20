@@ -10,7 +10,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help deps-check deps-upgrade fmt clippy test contracts-build
+.PHONY: help deps-check deps-upgrade fmt clippy test coverage coverage-html contracts-build frontend-test indexer-test check-all
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*?## / { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -43,3 +43,11 @@ coverage-html: ## Generate LLVM-cov HTML report for all contract crates.
 
 contracts-build: ## Build all contract wasm (delegates to the Soroban CLI).
 	stellar contract build
+
+frontend-test: ## Run the frontend Jest test suite.
+	cd frontend && npm test
+
+indexer-test: ## Run the indexer test suite.
+	cd indexer && npm test
+
+check-all: clippy test frontend-test indexer-test ## Run contracts, frontend, and indexer checks matching CI.
