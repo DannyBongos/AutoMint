@@ -46,6 +46,16 @@ describe("parseContractError", () => {
     });
   });
 
+  it("maps accrual BotNftCallFailed (14) to actionable copy (#1392)", () => {
+    expect(
+      parseContractError("Simulation failed: Error(Contract, #14)", "accrual")
+    ).toEqual({
+      title: "Bot sync failed",
+      message: "The bot contract could not complete the accrual sync.",
+      action: "Try again later.",
+    });
+  });
+
   it("returns generic copy for unknown codes and non-contract failures", () => {
     expect(parseContractError("Error(Contract, #999)", "token").title).toBe(
       "Transaction failed"
