@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
+import Modal from "./Modal";
 import clsx from "clsx";
 
 interface ConfirmDialogProps {
@@ -15,9 +16,6 @@ interface ConfirmDialogProps {
   cancelText?: string;
   onConfirm: () => void;
 }
-
-const FOCUSABLE =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function ConfirmDialog({
   isOpen,
@@ -170,6 +168,33 @@ function ConfirmDialog({
       )}
     </AnimatePresence>,
     document.body,
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={title} description={description}>
+      <div className="flex gap-3 mt-6">
+        <button
+          onClick={onConfirm}
+          className={clsx(
+            "flex-1 rounded-lg px-4 py-2 text-semibold transition-colors",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+            "bg-gold/10 text-gold border-gold/30 hover:bg-gold/20 hover:border-gold/50"
+          )}
+          disabled={false}
+        >
+          {confirmText}
+        </button>
+        <button
+          onClick={onClose}
+          className={clsx(
+            "flex-1 rounded-lg px-4 py-2 text-semibold transition-colors",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+            "text-muted hover:text-text hover:bg-card-2"
+          )}
+          disabled={false}
+        >
+          {cancelText}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
