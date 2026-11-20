@@ -7,21 +7,25 @@ The Bot NFT contract mints, tracks, and transfers bot NFTs. Each bot has a `BotT
 ### initialize
 
 ```rust
-pub fn initialize(env: Env, admin: Address, registry: Address) -> Result<(), BotNFTError>
+pub fn initialize(env: Env, admin: Address, registry: Address, payment_token: Address) -> Result<(), BotNFTError>
 ```
 
-Initialize the contract with an admin address and the Registry contract address used for bot-count callbacks. Must be called once before minting.
+Initialize the contract with an admin address, the Registry contract address, and the payment token used for paid-tier mints. Must be called once before minting.
 
 - `admin`: The contract administrator address.
-- `registry`: Address of the deployed Registry contract.
+- `registry`: Address of the deployed Registry contract used for bot-count callbacks.
+- `payment_token`: Address of the SEP-41 token contract used to charge for paid tiers.
+
+> **Note:** The older two-argument signature `initialize(admin, registry)` is no longer valid. The payment token must be supplied at initialization and is read from storage by `mint_tier` — it is not passed on each mint call.
 
 Errors:
+
 - `AlreadyInitialized`: The contract has already been initialized.
 
 Example:
 
 ```rust
-bot_nft_client.initialize(&admin, &registry_id);
+bot_nft_client.initialize(&admin, &registry_id, &payment_token_id);
 ```
 
 ---
@@ -37,6 +41,7 @@ Mint a free `BotTier::Basic` bot for `owner`. Requires authorization from `owner
 Returns the new bot ID.
 
 Errors:
+
 - `NotInitialized`: The contract has not been initialized.
 
 Example:
@@ -53,14 +58,18 @@ let bot_id = bot_nft_client.mint_basic(&owner);
 pub fn mint_tier(env: Env, owner: Address, tier: BotTier) -> Result<u64, BotNFTError>
 ```
 
-Mint a bot at the given `BotTier` (`Basic`, `Bronze`, `Silver`, `Gold`, or `Diamond`), charging `tier.price()` in the payment token configured during initialization from `owner` to the contract if the price is greater than zero. Requires authorization from `owner`.
+Mint a bot at the given `BotTier`, charging `tier.price()` in the payment token that was configured during `initialize`. The token address is read from storage — it is **not** passed as a parameter. Requires authorization from `owner`.
 
-- `tier`: The bot tier to mint. Each tier is available for purchase at its configured price.
-- The payment token is configured once during contract initialization.
+> **Tier naming:** The parameter type is `BotTier` (`Basic`, `Bronze`, `Silver`, `Gold`, `Diamond`). This differs from the UI concept of `Tier` (`Basic`, `Advanced`, `Premium`) — do not confuse the two when constructing client calls.
+
+- `tier`: The bot tier to mint.
+
+> **Note:** The older signature `mint_tier(owner, tier, token)` is no longer valid. Remove any `token` argument from existing call sites.
 
 Returns the new bot ID.
 
 Errors:
+
 - `NotInitialized`: The contract has not been initialized.
 - The underlying token `transfer` call panics (surfaced as an error by `try_mint_tier`) if `owner` has insufficient balance.
 
@@ -98,6 +107,7 @@ pub fn transfer(env: Env, bot_id: u64, from: Address, to: Address) -> Result<(),
 Transfer ownership of `bot_id` from `from` to `to`. Requires authorization from `from`. If `from == to`, this is a no-op that returns `Ok(())`.
 
 Errors:
+
 - `BotNotFound`: `bot_id` does not exist.
 - `NotOwner`: `from` is not the current owner of `bot_id`.
 
@@ -118,6 +128,7 @@ pub fn get_bot(env: Env, bot_id: u64) -> Result<BotNFT, BotNFTError>
 Fetch the `BotNFT` record for `bot_id`.
 
 Errors:
+
 - `BotNotFound`: `bot_id` does not exist.
 
 Example:
@@ -205,6 +216,7 @@ pub fn admin(env: Env) -> Result<Address, BotNFTError>
 Return the current admin address.
 
 Errors:
+
 - `NotInitialized`: The contract has not been initialized.
 
 Example:
@@ -224,6 +236,7 @@ pub fn burn(env: Env, bot_id: u64, owner: Address) -> Result<(), BotNFTError>
 Burn an existing bot NFT. Requires authorization from `owner`. Removes the bot from storage, decrements tier supply, updates the owner's bot list and tier index, decrements the registry count, and emits a `burn` event.
 
 Errors:
+
 - `BotNotFound`: `bot_id` does not exist.
 - `NotOwner`: `owner` does not match the current owner of `bot_id`.
 
@@ -244,6 +257,7 @@ pub fn bump_bot(env: Env, bot_id: u64) -> Result<(), BotNFTError>
 Permissionlessly refresh the persistent storage TTL of `bot_id` and contract instance. Extends the TTL by `LEDGER_BUMP` (120,960 ledgers, ~7 days) when remaining TTL drops below `LEDGER_THRESHOLD` (103,680 ledgers, ~6 days).
 
 Errors:
+
 - `BotNotFound`: `bot_id` does not exist.
 
 Example:
@@ -263,6 +277,7 @@ pub fn bump_user_bots(env: Env, user: Address) -> Result<(), BotNFTError>
 Permissionlessly refresh the persistent storage TTL of `user`'s bot list, every bot owned by `user`, and the contract instance.
 
 Errors:
+
 - `NotFound`: `user` has no bot records.
 
 Example:
@@ -292,8 +307,8 @@ let page_zero = bot_nft_client.get_bots_by_tier(&BotTier::Diamond, &0);
 ## Storage TTL and Retention Window
 
 The contract uses Soroban persistent storage with an active archival prevention policy:
+
 - **`LEDGER_THRESHOLD`**: `103680` ledgers (~6 days at 5s/ledger)
 - **`LEDGER_BUMP`**: `120960` ledgers (~7 days at 5s/ledger)
 
 Every write path (`initialize`, `mint_basic`, `mint_tier`, `admin_mint`, `transfer`, `burn`) extends the TTL of all modified storage entries (`Bot(id)`, `UserBots(user)`, `TierSupply(tier)`, `TierIndex(tier)`) as well as the contract instance. In addition, `bump_bot` and `bump_user_bots` provide permissionless endpoints so callers or frontends can keep entries alive before the ~7-day window expires without transferring or burning bots.
-

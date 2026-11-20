@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useId, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
@@ -31,7 +31,10 @@ function ConfirmDialog({
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const descId = description ? "confirm-description" : undefined;
+  // useId() prevents id collisions when multiple ConfirmDialogs render (#1370).
+  const uid = useId();
+  const titleId = `${uid}-title`;
+  const descId = description ? `${uid}-description` : undefined;
 
   useRef<HTMLDivElement>(null); // suppress unused
 
@@ -104,8 +107,7 @@ function ConfirmDialog({
             ref={contentRef}
             role="dialog"
             aria-modal="true"
-            aria-label={title}
-            aria-labelledby="confirm-title"
+            aria-labelledby={titleId}
             aria-describedby={descId}
             initial={{ opacity: 0, scale: 0.95, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -114,13 +116,13 @@ function ConfirmDialog({
             className={clsx(
               "relative w-full max-w-md rounded-2xl border border-liner bg-card p-6 shadow-2xl",
               "max-h-[85vh] overflow-y-auto",
-              "mx-auto my-auto"
+              "mx-auto my-auto",
             )}
           >
             <div className="flex items-start justify-between gap-4 mb-4">
               <div className="min-w-0 flex-1">
                 {title && (
-                  <h2 id="confirm-title" className="font-display text-lg font-bold text-text">
+                  <h2 id={titleId} className="font-display text-lg font-bold text-text">
                     {title}
                   </h2>
                 )}
@@ -167,7 +169,7 @@ function ConfirmDialog({
         </motion.div>
       )}
     </AnimatePresence>,
-    document.body
+    document.body,
   );
 }
 

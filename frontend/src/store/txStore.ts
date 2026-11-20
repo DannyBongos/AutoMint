@@ -8,6 +8,13 @@ export const TX_HISTORY_STORAGE_KEY = "automint-tx-history";
 export const TX_HISTORY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
+ * Maximum number of records kept in history (#1368).
+ * After age-pruning, only the newest N entries are retained to prevent the
+ * persisted JSON from growing unboundedly (localStorage ≈ 5 MB quota).
+ */
+export const TX_HISTORY_MAX_RECORDS = 200;
+
+/**
  * `pending` — accepted by the network, outcome not yet known. This is the
  * state a transaction is left in when the tab closes mid-confirmation; it is
  * resolved on the next load.
@@ -33,9 +40,10 @@ export type NewTxRecord = Omit<TxRecord, "status" | "timestamp" | "error"> & {
   timestamp?: number;
 };
 
-/** Drop every record older than {@link TX_HISTORY_MAX_AGE_MS}. */
+/** Drop every record older than {@link TX_HISTORY_MAX_AGE_MS}, then keep only the newest {@link TX_HISTORY_MAX_RECORDS} entries (#1368). */
 export function pruneExpired(records: readonly TxRecord[], now: number = Date.now()): TxRecord[] {
-  return records.filter((record) => now - record.timestamp <= TX_HISTORY_MAX_AGE_MS);
+  const aged = records.filter((record) => now - record.timestamp <= TX_HISTORY_MAX_AGE_MS);
+  return aged.slice(0, TX_HISTORY_MAX_RECORDS);
 }
 
 /** Guards against hand-edited or stale-shaped storage contents. */
@@ -89,7 +97,7 @@ export const useTxStore = create<TxState>()(
       resolveTransaction: (hash, status, error) =>
         set((state) => ({
           transactions: state.transactions.map((tx) =>
-            tx.hash === hash ? { ...tx, status, error } : tx
+            tx.hash === hash ? { ...tx, status, error } : tx,
           ),
         })),
       prune: () => set((state) => ({ transactions: pruneExpired(state.transactions) })),
@@ -106,8 +114,8 @@ export const useTxStore = create<TxState>()(
         const records = Array.isArray(stored) ? stored.filter(isTxRecord) : [];
         return { ...current, transactions: pruneExpired(records) };
       },
-    }
-  )
+    },
+  ),
 );
 
 export const selectTransactions = (s: TxState): TxRecord[] => s.transactions;
