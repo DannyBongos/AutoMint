@@ -117,6 +117,8 @@
 //!   Topics: ("listed", seller, listing_id), Data: (bot_id, price, currency)
 //! - `sold`: Emitted when a bot is purchased.
 //!   Topics: ("sold", seller, buyer), Data: (listing_id, bot_id, price, currency)
+//! - `offer_acc`: Emitted when an offer is accepted.
+//!   Topics: ("offer_acc", seller, buyer), Data: (offer_id, bot_id, amount, currency)
 //! - `cancel`: Emitted when a listing is cancelled.
 //!   Topics: ("cancel", seller, listing_id), Data: (bot_id,)
 //! - `fee_bps_updated`: Emitted when fee basis points change.
@@ -1822,7 +1824,7 @@ impl MarketplaceContract {
         );
         env.events().publish(
             (symbol_short!("offer_acc"), seller, offer.buyer.clone()),
-            (offer_id, offer.bot_id, offer.amount),
+            (offer_id, offer.bot_id, offer.amount, offer.currency.clone()),
         );
         Ok(())
     }

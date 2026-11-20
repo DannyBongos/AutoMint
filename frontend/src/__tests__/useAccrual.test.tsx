@@ -440,6 +440,21 @@ describe('useAccrual Hooks', () => {
       );
     });
 
+    it('invalidates the cached rank after a claim (#1394)', async () => {
+      const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
+      const { result } = renderHook(() => useClaim(), { wrapper });
+
+      act(() => {
+        result.current.mutate();
+      });
+
+      await waitFor(() =>
+        expect(invalidate).toHaveBeenCalledWith({
+          queryKey: qk.rank(mockPublicKey),
+        })
+      );
+    });
+
     it('should handle error when claiming fails', async () => {
       const error = new Error('Claim failed');
       mockExecuteTransaction.mockImplementation((opts) => {

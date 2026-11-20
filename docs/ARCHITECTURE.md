@@ -301,7 +301,7 @@ Soroban provides three storage tiers: **Instance**, **Persistent**, and **Tempor
 | | `cancelled` | `seller: Address`, `listing_id: u64` | `bot_id: u64` | Listing cancelled by seller |
 | | `bought` | `buyer: Address`, `listing_id: u64` | `(bot_id: u64, price: i128)` | Listing purchased by buyer |
 | | `offered` | `buyer: Address`, `offer_id: u64` | `(bot_id: u64, amount: i128, expires_at: u64)` | Offer escrowed |
-| | `offer_acc` | `seller: Address`, `buyer: Address` | `(offer_id: u64, bot_id: u64, amount: i128)` | Offer accepted; bot and funds moved |
+| | `offer_acc` | `seller: Address`, `buyer: Address` | `(offer_id: u64, bot_id: u64, amount: i128, currency: Address)` | Offer accepted; bot and funds moved |
 | | `offer_cxl` | `buyer: Address`, `offer_id: u64` | `(bot_id: u64, amount: i128, expired: bool)` | Offer cancelled and refunded |
 | | `offer_dsm` | `buyer: Address`, `offer_id: u64` | `(bot_id: u64, amount: i128, dismissed_by: Address)` | Offer dismissed by the bot owner or admin and refunded |
 | | `fees_wd` | `admin: Address`, `to: Address` | `(currency: Address, amount: i128, remaining: i128)` | Accrued fees withdrawn |

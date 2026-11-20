@@ -494,6 +494,7 @@ export function useClaim() {
       queryClient.invalidateQueries({ queryKey: qk.accrualState(publicKey) });
       queryClient.invalidateQueries({ queryKey: qk.amtBalance(publicKey) });
       queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: qk.rank(publicKey) });
       queryClient.invalidateQueries({ queryKey: qk.dashboard(publicKey) });
     },
   });

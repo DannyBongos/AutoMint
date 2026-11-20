@@ -36,6 +36,26 @@ describe("parseContractError", () => {
     ).toBe("Listing changed");
   });
 
+  it("maps registry ImplausiblePoints (11) to actionable copy (#1391)", () => {
+    expect(
+      parseContractError("Simulation failed: Error(Contract, #11)", "registry")
+    ).toEqual({
+      title: "Points update rejected",
+      message: "This points update exceeds the amount one call may add.",
+      action: "Contact support.",
+    });
+  });
+
+  it("maps accrual BotNftCallFailed (14) to actionable copy (#1392)", () => {
+    expect(
+      parseContractError("Simulation failed: Error(Contract, #14)", "accrual")
+    ).toEqual({
+      title: "Bot sync failed",
+      message: "The bot contract could not complete the accrual sync.",
+      action: "Try again later.",
+    });
+  });
+
   it("returns generic copy for unknown codes and non-contract failures", () => {
     expect(parseContractError("Error(Contract, #999)", "token").title).toBe(
       "Transaction failed"
