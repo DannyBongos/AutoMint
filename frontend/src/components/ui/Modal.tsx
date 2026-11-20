@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
@@ -18,7 +18,11 @@ interface ModalProps {
 export default function Modal({ isOpen, onClose, title, description, children }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const descId = description ? "modal-description" : undefined;
+  // useId() gives each mounted instance a unique id, preventing collisions
+  // when two modals are open simultaneously (#1370).
+  const uid = useId();
+  const titleId = title ? `${uid}-title` : undefined;
+  const descId = description ? `${uid}-description` : undefined;
 
   useFocusLock(contentRef, onClose);
 
@@ -43,7 +47,7 @@ export default function Modal({ isOpen, onClose, title, description, children }:
             role="dialog"
             aria-modal="true"
             aria-label={title ? undefined : "Dialog"}
-            aria-labelledby={title ? "modal-title" : undefined}
+            aria-labelledby={titleId}
             aria-describedby={descId}
             initial={{ opacity: 0, scale: 0.95, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -52,13 +56,13 @@ export default function Modal({ isOpen, onClose, title, description, children }:
             className={clsx(
               "relative w-full max-w-lg rounded-2xl border border-liner bg-card p-6 shadow-2xl",
               "max-h-[85vh] overflow-y-auto",
-              "mx-auto my-auto"
+              "mx-auto my-auto",
             )}
           >
             <div className="flex items-start justify-between gap-4 mb-4">
               <div className="min-w-0 flex-1">
                 {title && (
-                  <h2 id="modal-title" className="font-display text-lg font-bold text-text">
+                  <h2 id={titleId} className="font-display text-lg font-bold text-text">
                     {title}
                   </h2>
                 )}
@@ -82,6 +86,6 @@ export default function Modal({ isOpen, onClose, title, description, children }:
         </motion.div>
       )}
     </AnimatePresence>,
-    document.body
+    document.body,
   );
 }
