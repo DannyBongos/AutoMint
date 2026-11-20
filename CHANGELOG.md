@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Unit and integration test coverage for Dashboard and Leaderboard UI components ([#578]).
 
 ### Fixed
+- The marketplace `offer_acc` event includes the offer currency for per-currency volume attribution (#1390). Frontend error copy for registry `ImplausiblePoints` (11) and accrual `BotNftCallFailed` (14) is covered by regression tests (#1391, #1392). `useRank` uses the shared `qk.rank` key, is invalidated after claims, and inherits the network-only retry predicate (#1394).
 - Frontend wallet: Freighter API v3 `{ error }` results from `requestAccess`, `getAddress` and `getNetwork` are treated as failures in connect, session restore and polling, so a failed call no longer connects with an empty address or flags a network mismatch (#658)
 - Indexer startup validates every resolved contract ID with `isContractAddress` and fails with the affected contract name and its source (#659)
 - Indexer API rejects non-integer `days`, `limit` and `offset` with HTTP 400 instead of returning a server error (#660)

@@ -94,6 +94,8 @@ export const qk = {
     // #371 — the same limit on the season board is a different query.
     season ?? "all-time",
   ],
+  /** The connected wallet's own standing (#1394). */
+  rank: (address: string | null): QueryKey => ["rank", address],
   season: (): QueryKey => ["season"],
   leaderboardAccruals: (addresses: string[]): QueryKey => [
     "leaderboardAccruals",

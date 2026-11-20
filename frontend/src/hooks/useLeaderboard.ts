@@ -63,13 +63,11 @@ export function useRank() {
   const publicKey = useWalletStore(selectPublicKey);
 
   return useQuery<UserRank | null>({
-    queryKey: ["rank", publicKey],
+    queryKey: qk.rank(publicKey),
     queryFn: () => (publicKey ? getUserRank(publicKey) : Promise.resolve(null)),
     enabled: !!publicKey,
     refetchInterval: pollWhenVisible(),
-    staleTime: 15_000,
-    gcTime: 120_000,
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    staleTime: STALE_TIME.SHORT,
+    gcTime: GC_TIME.SHORT,
   });
 }

@@ -8,6 +8,7 @@ import {
   getUserRank,
 } from '@/lib/contracts';
 import { useWalletStore } from '@/store/walletStore';
+import { qk } from '@/lib/queryKeys';
 import type { UserProfile } from '@/types';
 
 // Mock the contracts module
@@ -254,6 +255,7 @@ describe('useRank Hook', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockGetUserRank).toHaveBeenCalledWith('GUSER');
     expect(result.current.data).toEqual(standing);
+    expect(queryClient.getQueryData(qk.rank('GUSER'))).toEqual(standing);
   });
 
   it('surfaces an unranked user as a null rank rather than a sentinel', async () => {
