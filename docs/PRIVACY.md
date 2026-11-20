@@ -27,8 +27,9 @@ possible identifying value is absent from every event.
 
 ## Product analytics
 
-Product funnel events are sent through Sentry breadcrumbs; the analytics code
-does not use a separate analytics vendor. Tracked event names cover wallet
+Product funnel events are sent as standalone info-level Sentry messages tagged
+`source: analytics`; the analytics code does not use a separate analytics
+vendor. Tracked event names cover wallet
 connection, registration, reward claims, and marketplace purchases:
 
 - `wallet_connect_started`, `wallet_connect_success`,
@@ -44,9 +45,11 @@ tier, or a label. The hash is a pseudonymous, stable identifier for the same
 address, not an anonymous or guaranteed-unrecoverable value. Do not treat it
 as a substitute for removing identifying data.
 
-Analytics events are added as Sentry breadcrumbs. By themselves, these calls
-do not explicitly capture or send a Sentry event; breadcrumbs may be included
-with a later Sentry event. Analytics events are not sent when analytics is
+Each analytics event is captured as its own Sentry message, so funnels are
+recorded even when no error occurs. Events are tagged with `source: analytics`
+and `analytics_event`, and their properties are attached as event extras.
+Failed-step properties carry only a short, PII-scrubbed error message and the
+Soroban contract error code. Analytics events are not sent when analytics is
 disabled.
 
 ## Scrubbing and limitations
