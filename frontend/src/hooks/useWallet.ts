@@ -19,6 +19,7 @@ import {
 } from "@/store/walletStore";
 import { STELLAR_NETWORK_PASSPHRASE } from "@/lib/constants";
 import { qk, DASHBOARD_POLL_MS } from "@/lib/queryKeys";
+import { errorAnalyticsProps, useAnalytics } from "@/lib/analytics";
 
 const FREIGHTER_DOWNLOAD_URL = "https://freighter.app";
 
@@ -118,12 +119,19 @@ export function useWallet() {
   const clearPersistedSession = useWalletStore(selectClearPersistedSession);
 
   const queryClient = useQueryClient();
+  const { track } = useAnalytics(publicKey);
 
   const isConnecting = status === "connecting";
   const isNotInstalled = !isFreighterInstalled();
 
   const connect = useCallback(async () => {
+    // Guard: if already connecting, ignore duplicate requests (#532)
+    if (status === "connecting") return;
+
+    track("wallet_connect_started");
+
     if (!isFreighterInstalled()) {
+      track("wallet_connect_failed", { label: "freighter_not_installed" });
       toast.error("Freighter wallet is not installed", {
         action: {
           label: "Install Freighter",
@@ -134,9 +142,6 @@ export function useWallet() {
       window.open(FREIGHTER_DOWNLOAD_URL, "_blank");
       return;
     }
-
-    // Guard: if already connecting, ignore duplicate requests (#532)
-    if (status === "connecting") return;
 
     setConnecting();
     toast.loading("Connecting wallet...", { id: "wallet-connect" });
@@ -157,13 +162,15 @@ export function useWallet() {
       } else {
         toast.success("Wallet connected!", { id: "wallet-connect" });
       }
+      track("wallet_connect_success");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to connect wallet";
       setError(message);
       toast.error(message, { id: "wallet-connect" });
+      track("wallet_connect_failed", errorAnalyticsProps(err));
     }
-  }, [status, setConnecting, setConnected, setNetworkMismatch, setError]);
+  }, [status, setConnecting, setConnected, setNetworkMismatch, setError, track]);
 
   const disconnectWallet = useCallback(() => {
     disconnect();

@@ -12,10 +12,11 @@
  *    `NEXT_PUBLIC_ANALYTICS_ENABLED` is absent or `"false"`.
  *
  * 3. **Sentry as the transport**.  Rather than adding a second third-party
- *    SDK, we reuse Sentry's `addBreadcrumb` + `captureMessage` to ship
- *    structured funnel events, keeping the dependency footprint small.
- *    Replace the `_dispatch` implementation below to swap in a dedicated
- *    analytics service (e.g. PostHog, Plausible) without changing call sites.
+ *    SDK, we reuse Sentry's `captureMessage` to ship structured funnel events
+ *    as standalone, info-level messages tagged `source: analytics`, keeping
+ *    the dependency footprint small.  Replace the `_dispatch` implementation
+ *    below to swap in a dedicated analytics service (e.g. PostHog, Plausible)
+ *    without changing call sites.
  *
  * Core funnel events
  * ------------------
@@ -37,7 +38,9 @@
  * See docs/PRIVACY.md for the complete data-collection policy.
  */
 
+import { useCallback, useEffect, useRef } from "react";
 import * as Sentry from "@sentry/nextjs";
+import { scrubString } from "./sentryScrub";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,6 +72,31 @@ export interface AnalyticsProperties {
   /** Arbitrary string tag for additional context. */
   label?: string;
   [key: string]: string | number | boolean | undefined;
+}
+
+/**
+ * Build the properties for a `*_failed` event from a thrown error.
+ *
+ * Only a short, scrubbed message and — when the error carries one — the
+ * Soroban contract error code are kept. Raw addresses, e-mails and stack
+ * traces never leave the browser.
+ */
+export function errorAnalyticsProps(
+  error: unknown
+): Pick<AnalyticsProperties, "error_message" | "contract_error"> {
+  const raw =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  if (!raw) return {};
+
+  const match = raw.match(/Error\s*\(\s*Contract\s*,\s*#?(\d+)\s*\)/i);
+  return {
+    error_message: scrubString(raw).slice(0, 200),
+    ...(match ? { contract_error: `Error(Contract, #${match[1]})` } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -105,11 +133,13 @@ export async function hashAddress(address: string): Promise<string> {
  * (PostHog, Amplitude, Plausible, etc.) without touching call sites.
  */
 function _dispatch(event: AnalyticsEvent, props: AnalyticsProperties): void {
-  Sentry.addBreadcrumb({
-    category: "analytics",
-    message: event,
-    data: props,
+  // Breadcrumbs alone are only attached to a *later* error event and are
+  // dropped otherwise, so a funnel with no error was never recorded. Send a
+  // standalone message tagged as analytics so events arrive on their own.
+  Sentry.captureMessage(event, {
     level: "info",
+    tags: { source: "analytics", analytics_event: event },
+    extra: props,
   });
 
   // In development also emit a console group for easy debugging.
@@ -146,8 +176,9 @@ export function track(event: AnalyticsEvent, props: AnalyticsProperties = {}): v
 
 /**
  * React hook that returns a memoised `track` function pre-bound to the
- * current wallet address hash.  Avoids calling `hashAddress` on every
- * render by caching the result in a closure.
+ * current wallet address hash.  `hashAddress` runs once per address change
+ * (not once per render), and every event is dispatched synchronously so the
+ * funnel order is preserved.
  *
  * @example
  * const { track } = useAnalytics(publicKey);
@@ -156,26 +187,45 @@ export function track(event: AnalyticsEvent, props: AnalyticsProperties = {}): v
 export function useAnalytics(address: string | null): {
   track: (event: AnalyticsEvent, extra?: AnalyticsProperties) => void;
 } {
-  // We compute the hash lazily and cache it so the crypto call runs at most
-  // once per address change.
-  let cachedHash: string | undefined;
+  // A plain `let` in the hook body is recreated on every render, so the
+  // crypto call ran again on the first `track` call of each render and that
+  // first event was dispatched asynchronously — often after later ones.
+  // Keep the hash (with the address it belongs to) in a ref instead.
+  const hashRef = useRef<{ address: string | null; hash: string | undefined }>({
+    address: null,
+    hash: undefined,
+  });
 
-  const trackWithAddress = (event: AnalyticsEvent, extra: AnalyticsProperties = {}) => {
-    if (!ENABLED) return;
+  useEffect(() => {
+    hashRef.current = { address, hash: undefined };
+    if (!ENABLED || !address) return;
 
-    if (address && !cachedHash) {
-      // Fire-and-forget: hash the address asynchronously, then re-dispatch.
-      hashAddress(address).then((h) => {
-        cachedHash = h;
-        _dispatch(event, { ...extra, user_hash: h });
+    let cancelled = false;
+    hashAddress(address)
+      .then((hash) => {
+        if (!cancelled) hashRef.current = { address, hash };
+      })
+      .catch(() => {
+        // Hashing is best-effort analytics — never break the UI for it.
       });
-    } else {
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
+
+  const track = useCallback(
+    (event: AnalyticsEvent, extra: AnalyticsProperties = {}) => {
+      if (!ENABLED) return;
+
+      const entry = hashRef.current;
+      const userHash = entry.address === address ? entry.hash : undefined;
       _dispatch(event, {
         ...extra,
-        ...(cachedHash ? { user_hash: cachedHash } : {}),
+        ...(userHash ? { user_hash: userHash } : {}),
       });
-    }
-  };
+    },
+    [address],
+  );
 
-  return { track: trackWithAddress };
+  return { track };
 }

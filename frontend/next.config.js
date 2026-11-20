@@ -5,26 +5,12 @@ const withBundleAnalyzer = require("@next/bundle-analyzer")({
 
 const { withSentryConfig } = require("@sentry/nextjs");
 
-const publicEnv = [
-  "NEXT_PUBLIC_NETWORK",
-  "NEXT_PUBLIC_SOROBAN_RPC_URL",
-  "NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE",
-  "NEXT_PUBLIC_REGISTRY_CONTRACT_ID",
-  "NEXT_PUBLIC_BOT_NFT_CONTRACT_ID",
-  "NEXT_PUBLIC_ACCRUAL_CONTRACT_ID",
-  "NEXT_PUBLIC_MARKETPLACE_CONTRACT_ID",
-  "NEXT_PUBLIC_TOKEN_CONTRACT_ID",
-  "NEXT_PUBLIC_SENTRY_DSN",
-  "NEXT_PUBLIC_APP_ENV",
-  "NEXT_PUBLIC_ANALYTICS_ENABLED",
-].reduce((env, key) => {
-  env[key] = process.env[key] ?? "";
-  return env;
-}, {});
-
+// Next.js already inlines every NEXT_PUBLIC_* variable at build time. Do not
+// copy them into `env` here: doing so turns unset variables into `""`, and
+// `process.env.X ?? default` in constants.ts then never sees a nullish value
+// (so defaults such as NETWORK="TESTNET" are silently skipped).
 const nextConfig = {
   reactStrictMode: true,
-  env: publicEnv,
   webpack: (config) => {
     // Required for @stellar/stellar-sdk in browser
     config.resolve.fallback = {

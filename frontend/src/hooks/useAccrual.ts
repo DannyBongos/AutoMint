@@ -22,6 +22,7 @@ import { STALE_TIME, GC_TIME, qk, DASHBOARD_POLL_MS } from "@/lib/queryKeys";
 import { trackStatus, newTxId } from "@/components/ui/TxStatus";
 import { CONTRACT_ADDRESSES, COUNTER_TICK_MS } from "@/lib/constants";
 import { toastContractError } from "@/lib/errors";
+import { errorAnalyticsProps, useAnalytics } from "@/lib/analytics";
 
 const POINTS_PER_HOUR_DIVISOR = 3600; // Seconds in an hour
 
@@ -57,6 +58,7 @@ export function useRegister() {
   const queryClient = useQueryClient();
   const publicKey = useWalletStore(selectPublicKey);
   const [progress, setProgress] = useState<RegisterProgress | null>(null);
+  const { track } = useAnalytics(publicKey);
 
   const mutation = useMutation({
     mutationFn: async (username: string) => {
@@ -192,7 +194,11 @@ export function useRegister() {
       setProgress({ stepIndex: REGISTER_STEPS.length, step: "done" });
       return { success: true };
     },
+    onMutate: () => {
+      track("registration_started");
+    },
     onSuccess: () => {
+      track("registration_success");
       // Every step already awaited finality, so invalidate immediately —
       // the old 2-second blind delay left the dashboard stale (#452).
       queryClient.invalidateQueries({ queryKey: qk.registered(publicKey) });
@@ -205,6 +211,7 @@ export function useRegister() {
       toast.success("Registration complete! Welcome to AutoMint!");
     },
     onError: (error: Error) => {
+      track("registration_failed", errorAnalyticsProps(error));
       const contract =
         progress?.step === "mint"
           ? "botNft"
@@ -413,6 +420,7 @@ export function useDashboardData() {
 export function useClaim() {
   const queryClient = useQueryClient();
   const publicKey = useWalletStore(selectPublicKey);
+  const { track } = useAnalytics(publicKey);
 
   return useMutation({
     mutationFn: async () => {
@@ -436,6 +444,7 @@ export function useClaim() {
       return status;
     },
     onMutate: async () => {
+      track("claim_started");
       // Optimistic update (#462): zero the pending counter immediately by
       // moving last_claim_ts to now. Snapshot for rollback in onError.
       await queryClient.cancelQueries({ queryKey: qk.accrualState(publicKey) });
@@ -462,11 +471,15 @@ export function useClaim() {
       );
       return { previousAccrual, previousDashboard };
     },
+    onSuccess: () => {
+      track("claim_success");
+    },
     onError: (
       error: Error,
       _variables: void,
       context: { previousAccrual: unknown; previousDashboard: unknown } | undefined
     ) => {
+      track("claim_failed", errorAnalyticsProps(error));
       // Roll back to the true state on failure (#462).
       if (context) {
         queryClient.setQueryData(qk.accrualState(publicKey), context.previousAccrual);
